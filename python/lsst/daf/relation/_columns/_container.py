@@ -131,7 +131,9 @@ class ColumnContainer(ABC):
         return ColumnRangeLiteral(r)
 
     @classmethod
-    def sequence(cls, items: Sequence[ColumnExpression], dtype: type | None = None) -> ColumnContainer:
+    def sequence(
+        cls, items: Sequence[ColumnExpression], dtype: type | None = None
+    ) -> ColumnExpressionSequence:
         """Construct a container expression from a sequence of item
         expressions.
 
@@ -167,7 +169,7 @@ class ColumnRangeLiteral(ColumnContainer):
         return frozenset()
 
     def __str__(self) -> str:
-        return f"{self.value.start}:{self.value.stop}:{self.value.step}"
+        return f"[{self.value.start}:{self.value.stop}:{self.value.step}]"
 
     def is_supported_by(self, engine: Engine) -> bool:
         # Docstring inherited.

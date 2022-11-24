@@ -235,7 +235,7 @@ class ColumnExpression(ABC):
             ),
         )
 
-    def eq(self, other: ColumnExpression) -> Predicate:
+    def eq(self, other: ColumnExpression) -> PredicateFunction:
         """Construct a boolean equality-comparison expression.
 
         Parameters
@@ -250,7 +250,7 @@ class ColumnExpression(ABC):
         """
         return self.predicate_method("__eq__", other)
 
-    def ne(self, other: ColumnExpression) -> Predicate:
+    def ne(self, other: ColumnExpression) -> PredicateFunction:
         """Construct a boolean inequality-comparison expression.
 
         Parameters
@@ -265,7 +265,7 @@ class ColumnExpression(ABC):
         """
         return self.predicate_method("__ne__", other)
 
-    def lt(self, other: ColumnExpression) -> Predicate:
+    def lt(self, other: ColumnExpression) -> PredicateFunction:
         """Construct a boolean less-than-comparison expression.
 
         Parameters
@@ -280,7 +280,7 @@ class ColumnExpression(ABC):
         """
         return self.predicate_method("__lt__", other)
 
-    def gt(self, other: ColumnExpression) -> Predicate:
+    def gt(self, other: ColumnExpression) -> PredicateFunction:
         """Construct a boolean greater-than-comparison expression.
 
         Parameters
@@ -295,7 +295,7 @@ class ColumnExpression(ABC):
         """
         return self.predicate_method("__gt__", other)
 
-    def le(self, other: ColumnExpression) -> Predicate:
+    def le(self, other: ColumnExpression) -> PredicateFunction:
         """Construct a boolean less-or-equal-comparison expression.
 
         Parameters
@@ -310,7 +310,7 @@ class ColumnExpression(ABC):
         """
         return self.predicate_method("__le__", other)
 
-    def ge(self, other: ColumnExpression) -> Predicate:
+    def ge(self, other: ColumnExpression) -> PredicateFunction:
         """Construct a boolean greater-or-equal-comparison expression.
 
         Parameters
@@ -520,7 +520,9 @@ class ColumnFunction(ColumnExpression):
 
     def is_supported_by(self, engine: Engine) -> bool:
         # Docstring inherited.
-        return self.supporting_engine_types is None or isinstance(engine, self.supporting_engine_types)
+        return (
+            self.supporting_engine_types is None or isinstance(engine, self.supporting_engine_types)
+        ) and all(arg.is_supported_by(engine) for arg in self.args)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -567,7 +569,9 @@ class PredicateFunction(Predicate):
 
     def is_supported_by(self, engine: Engine) -> bool:
         # Docstring inherited.
-        return self.supporting_engine_types is None or isinstance(engine, self.supporting_engine_types)
+        return (
+            self.supporting_engine_types is None or isinstance(engine, self.supporting_engine_types)
+        ) and all(arg.is_supported_by(engine) for arg in self.args)
 
     def as_trivial(self) -> None:
         # Docstring inherited.
