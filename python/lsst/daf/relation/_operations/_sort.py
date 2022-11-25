@@ -27,13 +27,13 @@ __all__ = (
 )
 
 import dataclasses
-from collections.abc import Sequence, Set
+from collections.abc import Set
 from typing import TYPE_CHECKING, final
 
 from .._columns import ColumnTag
-from .._exceptions import ColumnError, EngineError
+from .._exceptions import ColumnError
 from .._operation_relations import UnaryOperationRelation
-from .._unary_operation import Reordering
+from .._unary_operation import Identity, Reordering, UnaryCommutator, UnaryOperation
 
 if TYPE_CHECKING:
     from .._columns import ColumnExpression
@@ -58,7 +58,7 @@ class Sort(Reordering):
     column expressions.
     """
 
-    terms: Sequence[SortTerm]
+    terms: tuple[SortTerm, ...] = ()
     """Criteria for sorting rows (`Sequence` [ `SortTerm` ])."""
 
     @property
@@ -72,112 +72,76 @@ class Sort(Reordering):
     def __str__(self) -> str:
         return f"sort[{', '.join(str(term) for term in self.terms)}]"
 
-    def apply(
-        self,
-        target: Relation,
-        *,
-        preferred_engine: Engine | None = None,
-        backtrack: bool = True,
-        transfer: bool = False,
-        require_preferred_engine: bool = False,
-        lock: bool = False,
-    ) -> Relation:
-        """Return a new relation that applies this sort to an existing
-        relation.
+    def is_supported_by(self, engine: Engine) -> bool:
+        # Docstring inherited.
+        return all(term.expression.is_supported_by(engine) for term in self.terms)
 
-        `Relation.sorted` is a convenience method that should
-        be preferred to constructing and applying a `Sort` directly.
-
-        Parameters
-        ----------
-        terms : `~collections.abc.Sequence` [ `SortTerm` ]
-            Ordered sequence of column expressions to sort on, with whether to
-            apply them in ascending or descending order.
-        preferred_engine : `Engine`, optional
-            Engine that the operation would ideally be performed in.  If this
-            is not equal to ``self.engine``, the ``backtrack``, ``transfer``,
-            and ``require_preferred_engine`` arguments control the behavior.
-        backtrack : `bool`, optional
-            If `True` (default) and the current engine is not the preferred
-            engine, attempt to insert this sort before a transfer upstream of
-            the current relation, as long as this can be done without breaking
-            up any locked relations or changing the resulting relation content.
-        transfer : `bool`, optional
-            If `True` (`False` is default) and the current engine is not the
-            preferred engine, insert a new `Transfer` before the `Sort`.  If
-            ``backtrack`` is also true, the transfer is added only if the
-            backtrack attempt fails.
-        require_preferred_engine : `bool`, optional
-            If `True` (`False` is default) and the current engine is not the
-            preferred engine, raise `EngineError`.  If ``backtrack`` is also
-            true, the exception is only raised if the backtrack attempt fails.
-            Ignored if ``transfer`` is true.
-        lock : `bool`, optional
-            Set `~Relation.is_locked` on the returned relation to this value.
-
-        Returns
-        -------
-        relation : `Relation`
-            New relation with sorted rows.  Will be `target` if ``terms`` is
-            empty.    If `target` is already a sort operation relation, the
-            operations will be merged by concatenating their terms, which may
-            result in duplicate sort terms that have no effect.
-
-        Raises
-        ------
-        ColumnError
-            Raised if any column required by a `SortTerm` is not present in
-            ``target.columns``.
-        EngineError
-            Raised if ``require_preferred_engine=True`` and it was impossible
-            to insert this operation in the preferred engine, or if a
-            `SortTerm` expression was not supported by the engine.
-        """
+    def _begin_apply(
+        self, target: Relation, preferred_engine: Engine | None
+    ) -> tuple[UnaryOperation, Engine]:
+        # Docstring inherited.
         if not self.terms:
-            return target
-        if preferred_engine is not None and preferred_engine != target.engine:
-            if backtrack and (result := self._insert_recursive(target, preferred_engine, lock)):
-                return result
-            elif transfer:
-                from ._transfer import Transfer
-
-                target = Transfer(preferred_engine).apply(target)
-            elif require_preferred_engine:
-                raise EngineError(
-                    f"No way to perform sort on {self.terms} with required engine {preferred_engine}."
-                )
+            return Identity(), target.engine
         for term in self.terms:
-            if not term.expression.is_supported_by(target.engine):
-                raise EngineError(f"Sort term {term} does not support engine {target.engine}.")
             if not term.expression.columns_required <= target.columns:
                 raise ColumnError(
                     f"Sort term {term} for target relation {target} needs "
                     f"columns {set(term.expression.columns_required - target.columns)}."
                 )
-        match target:
-            case UnaryOperationRelation(operation=Sort(terms=previous_terms), target=nested_target):
-                new_terms = list(self.terms)
-                for term in previous_terms:
-                    if term not in new_terms:
-                        new_terms.append(term)
-                return Sort(new_terms).apply(nested_target, lock=lock)
-        return super().apply(target, lock=lock)
+        return super()._begin_apply(target, preferred_engine)
 
-    def _insert_recursive(self, target: Relation, preferred_engine: Engine, lock: bool) -> Relation | None:
-        """Recursive implementation for `apply`.
+    def _finish_apply(self, target: Relation) -> Relation:
+        # Docstring inherited.
+        if not self.terms:
+            return target
+        return super()._finish_apply(target)
 
-        See that method's documentation for details.
+    def then(self, next: Sort) -> Sort:
+        """Compose this sort with another one.
+
+        Parameters
+        ----------
+        next : `Sort`
+            Sort that acts after ``self``.
+
+        Returns
+        -------
+        composition : `Sort`
+            Sort that is equivalent to ``self`` and ``next`` being applied
+            back-to-back.
         """
-        if target.is_locked:
-            return None
-        match target:
-            case UnaryOperationRelation(operation=operation, target=next_target):
-                if not target.engine.preserves_order(operation):
-                    return None
-                if operation.is_order_dependent:
-                    return None
-                if next_target.engine == preferred_engine:
-                    return operation.apply(self.apply(next_target, lock=lock))
-                if new_target := self._insert_recursive(next_target, preferred_engine, lock=lock):
-                    return operation.apply(new_target)
+        new_terms = list(next.terms)
+        for term in self.terms:
+            if term not in new_terms:
+                new_terms.append(term)
+        return Sort(tuple(new_terms))
+
+    def commute(self, current: UnaryOperationRelation) -> UnaryCommutator:
+        # Docstring inherited.
+        if not self.columns_required <= current.target.columns:
+            return UnaryCommutator(
+                first=None,
+                second=current.operation,
+                done=False,
+                messages=(
+                    f"{current.target} is missing columns "
+                    f"{set(self.columns_required - current.target.columns)}",
+                ),
+            )
+        if current.operation.is_order_dependent:
+            return UnaryCommutator(
+                first=None,
+                second=current.operation,
+                done=False,
+                messages=(f"{current.operation} is order-dependent",),
+            )
+        return UnaryCommutator(self, current.operation)
+
+    def simplify(self, upstream: UnaryOperation) -> UnaryOperation | None:
+        # Docstring inherited.
+        if not self.terms:
+            return upstream
+        match upstream:
+            case Sort():
+                return upstream.then(self)
         return None

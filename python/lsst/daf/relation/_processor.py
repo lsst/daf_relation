@@ -26,8 +26,11 @@ __all__ = ("Processor",)
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
+from ._marker_relation import MarkerRelation
+from ._materialization import Materialization
 from ._operation_relations import BinaryOperationRelation, UnaryOperationRelation
-from ._operations import Chain, Materialization, Transfer
+from ._operations import Chain
+from ._transfer import Transfer
 
 if TYPE_CHECKING:
     from ._engine import Engine
@@ -166,72 +169,73 @@ class Processor(ABC):
         """
         if original.payload is not None:
             return original, True
+        result: Relation
+        payload: Any = None
         match original:
-            case UnaryOperationRelation(operation=operation, target=target):
-                payload = None
-                match operation:
-                    case Transfer(destination=destination):
-                        # If the result is a trivial relation, just make a new
-                        # payload directly in the destination engine.
-                        if original.is_join_identity:
-                            payload = destination.get_join_identity_payload()
-                            new_target = target
-                        elif original.max_rows == 0:
-                            payload = destination.get_doomed_payload(original.columns)
-                            new_target = target
-                        else:
-                            # Process recursively, ensuring upstream transfers
-                            # and materializations happen first.
-                            new_target, _ = self._process_recursive(target, materialize_as=None)
-                            # Actually execute the transfer.  If materialize_as
-                            # is not None, this will also take care of an
-                            # immediately-downstream Materialization.
-                            payload = self.transfer(new_target, destination, materialize_as)
-                        # We need to attach this payload to the processed
-                        # relation we return, but we don't want to attach it to
-                        # the original, so we reapply the transfer operation to
-                        # new_target even if new_target is target.
-                        result = operation.apply(new_target)
-                        result.attach_payload(payload)
-                        return result, materialize_as is not None
-                    case Materialization(name=name):
-                        assert name is not None, "Guaranteed by Materialization.apply."
-                        # Process recursively, ensuring upstream transfers and
-                        # materializations happen first.  Pass name as
-                        # materialize_as to tell an immediately-upstream
-                        # transfer to materialize directly.
-                        new_target, persisted = self._process_recursive(target, materialize_as=name)
-                        if new_target is not target:
-                            result = operation.apply(new_target)
-                            if result.payload is not None:
-                                # This operation has been simplified away
-                                # (perhaps it's now a materialization of a
-                                # leaf).
-                                original.attach_payload(result.payload)
-                                return result, True
-                        else:
-                            result = original
-                        if persisted:
-                            payload = new_target.payload
-                        elif original.is_join_identity:
-                            payload = target.engine.get_join_identity_payload()
-                        elif original.max_rows == 0:
-                            payload = target.engine.get_doomed_payload(original.columns)
-                        else:
-                            payload = self.materialize(new_target, name)
-                        # Attach the payload to the original relation, not just
-                        # the processed one, so it's used every time that the
-                        # original relation tree is processed.
-                        original.attach_payload(payload)
-                        if result is not original:
-                            result.attach_payload(payload)
+            case Transfer(destination=destination, target=target):
+                # If the result is a trivial relation, just make a new
+                # payload directly in the destination engine.
+                if original.is_join_identity:
+                    payload = destination.get_join_identity_payload()
+                    new_target = target
+                elif original.max_rows == 0:
+                    payload = destination.get_doomed_payload(original.columns)
+                    new_target = target
+                else:
+                    # Process recursively, ensuring upstream transfers
+                    # and materializations happen first.
+                    new_target, _ = self._process_recursive(target, materialize_as=None)
+                    # Actually execute the transfer.  If materialize_as
+                    # is not None, this will also take care of an
+                    # immediately-downstream Materialization.
+                    payload = self.transfer(new_target, destination, materialize_as)
+                # We need to attach this payload to the processed
+                # relation we return, but we don't want to attach it to
+                # the original, so we reapply the transfer operation to
+                # new_target even if new_target is target.
+                result = original.reapply(new_target, payload)
+                return result, materialize_as is not None
+            case Materialization(name=name, target=target):
+                assert name is not None, "Guaranteed by Materialization.apply."
+                # Process recursively, ensuring upstream transfers and
+                # materializations happen first.  Pass name as
+                # materialize_as to tell an immediately-upstream
+                # transfer to materialize directly.
+                new_target, persisted = self._process_recursive(target, materialize_as=name)
+                if new_target is not target:
+                    result = new_target.materialized(name=name)
+                    if result.payload is not None:
+                        # This operation has been simplified away
+                        # (perhaps it's now a materialization of a
+                        # leaf).
+                        original.attach_payload(result.payload)
                         return result, True
-                    case _:
-                        new_target, _ = self._process_recursive(target, materialize_as=None)
-                        if new_target is not target:
-                            return operation.apply(new_target), False
-                        else:
-                            return original, False
+                else:
+                    result = original
+                if persisted:
+                    payload = new_target.payload
+                elif original.is_join_identity:
+                    payload = target.engine.get_join_identity_payload()
+                elif original.max_rows == 0:
+                    payload = target.engine.get_doomed_payload(original.columns)
+                else:
+                    payload = self.materialize(new_target, name)
+                # Attach the payload to the original relation, not just
+                # the processed one, so it's used every time that the
+                # original relation tree is processed.
+                original.attach_payload(payload)
+                if result is not original:
+                    result.attach_payload(payload)
+                return result, True
+            case MarkerRelation(target=target):
+                new_target, persisted = self._process_recursive(target, materialize_as=materialize_as)
+                return original.reapply(new_target), persisted
+            case UnaryOperationRelation(operation=operation, target=target):
+                new_target, _ = self._process_recursive(target, materialize_as=None)
+                if new_target is not target:
+                    return operation.apply(new_target), False
+                else:
+                    return original, False
             case BinaryOperationRelation(operation=operation, lhs=lhs, rhs=rhs):
                 new_lhs, lhs_persisted = self._process_recursive(lhs, materialize_as=None)
                 new_rhs, rhs_persisted = self._process_recursive(rhs, materialize_as=None)

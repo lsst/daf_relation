@@ -27,7 +27,7 @@ import dataclasses
 import itertools
 from collections.abc import Callable, Container, Mapping, Sequence, Set
 from operator import attrgetter, itemgetter
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .._columns import (
     ColumnContainer,
@@ -47,23 +47,17 @@ from .._columns import (
     PredicateLiteral,
     PredicateReference,
 )
+from .._engine import Engine as BaseEngine
 from .._engine import GenericConcreteEngine
 from .._exceptions import EngineError
 from .._leaf_relation import LeafRelation
+from .._marker_relation import MarkerRelation
+from .._materialization import Materialization
 from .._operation_relations import BinaryOperationRelation, UnaryOperationRelation
-from .._operations import (
-    Calculation,
-    Chain,
-    Deduplication,
-    Join,
-    Materialization,
-    Projection,
-    Selection,
-    Slice,
-    Sort,
-    Transfer,
-)
-from .._unary_operation import Reordering, UnaryOperation
+from .._operations import Calculation, Chain, Deduplication, Join, Projection, Selection, Slice, Sort
+from .._relation import Relation
+from .._transfer import Transfer
+from .._unary_operation import UnaryOperation
 from ._row_iterable import (
     CalculationRowIterable,
     ChainRowIterable,
@@ -74,9 +68,6 @@ from ._row_iterable import (
     RowSequence,
     SelectionRowIterable,
 )
-
-if TYPE_CHECKING:
-    from .._relation import Relation
 
 
 @dataclasses.dataclass(repr=False, eq=False, kw_only=True)
@@ -109,7 +100,7 @@ class Engine(GenericConcreteEngine[Callable[..., Any]]):
         """
         return LeafRelation(
             self,
-            columns,
+            frozenset(columns),
             payload,
             min_rows=len(payload),
             max_rows=len(payload),
@@ -119,19 +110,6 @@ class Engine(GenericConcreteEngine[Callable[..., Any]]):
             parameters=parameters,
         )
 
-    def preserves_order(self, operation: UnaryOperation | Chain) -> bool:
-        # Docstring inherited.
-        match operation:
-            case Transfer(destination=destination):
-                if destination == self:
-                    return True
-                else:
-                    return destination.preserves_order(operation)
-            case Reordering():
-                return False
-            case _:
-                return True
-
     def get_join_identity_payload(self) -> RowIterable:
         # Docstring inherited.
         return RowMapping((), {(): {}})
@@ -139,6 +117,38 @@ class Engine(GenericConcreteEngine[Callable[..., Any]]):
     def get_doomed_payload(self, columns: Set[ColumnTag]) -> RowIterable:
         # Docstring inherited.
         return RowMapping((), {})
+
+    def backtrack_unary(
+        self, operation: UnaryOperation, tree: Relation, preferred: BaseEngine
+    ) -> tuple[Relation, bool, tuple[str, ...]]:
+        # Docstring inherited.
+        if tree.is_locked:
+            return tree, False, (f"{tree} is locked",)
+        match tree:
+            case UnaryOperationRelation(target=target):
+                commutator = operation.commute(tree)
+                if commutator.first is None:
+                    return tree, commutator.done, commutator.messages
+                else:
+                    upstream, done, messages = self.backtrack_unary(commutator.first, target, preferred)
+                    if upstream is not target:
+                        result = commutator.second._finish_apply(upstream)
+                    else:
+                        result = tree
+                    return (
+                        result,
+                        done and commutator.done,
+                        commutator.messages + messages,
+                    )
+            case BinaryOperationRelation():
+                return tree, False, ("backtracking through binary operations is not implemented",)
+            case Transfer(target=target) as transfer:
+                if target.engine == preferred:
+                    return transfer.reapply(operation.apply(target)), True, ()
+                else:
+                    upstream, done, messages = target.engine.backtrack_unary(operation, target, preferred)
+                    return (transfer.reapply(upstream), done, messages)
+        raise NotImplementedError(f"Unsupported relation type {tree} for engine {self}.")
 
     def execute(self, relation: Relation) -> RowIterable:
         """Execute a native iteration relation, returning a Python iterable.
@@ -184,13 +194,9 @@ class Engine(GenericConcreteEngine[Callable[..., Any]]):
                         return CalculationRowIterable(
                             target_rows, tag, self.convert_column_expression(expression)
                         )
-                    case Deduplication(unique_key=unique_key):
-                        assert unique_key is not None, "Guaranteed by Deduplication.apply."
-                        return target_rows.to_mapping(tuple(unique_key))
-                    case Materialization():
-                        result = target_rows.materialized()
-                        relation.attach_payload(result)
-                        return result
+                    case Deduplication():
+                        unique_key = tuple(tag for tag in relation.columns if tag.is_key)
+                        return target_rows.to_mapping(unique_key)
                     case Projection(columns=columns):
                         return ProjectionRowIterable(target_rows, columns)
                     case Selection(predicate=predicate):
@@ -220,12 +226,6 @@ class Engine(GenericConcreteEngine[Callable[..., Any]]):
                                 reverse=not ascending,
                             )
                         return RowSequence(rows_list)
-                    case Transfer(destination=destination):
-                        raise EngineError(
-                            f"Engine {self!r} cannot handle transfer from "
-                            f"{target.engine!r} to {destination!r}; "
-                            "use `lsst.daf.relation.Processor` first to handle this operation."
-                        )
                     case _:
                         return self.apply_custom_unary_operation(operation, target)
             case BinaryOperationRelation(operation=operation, lhs=lhs, rhs=rhs):
@@ -235,6 +235,26 @@ class Engine(GenericConcreteEngine[Callable[..., Any]]):
                     case Join():
                         raise EngineError("Joins are not supported by the iteration engine.")
                 raise EngineError(f"Custom binary operation {operation} is not supported.")
+            case Materialization(target=target):
+                result = self.execute(target).materialized()
+                relation.attach_payload(result)
+                return result
+            case Transfer(destination=destination, target=target):
+                if isinstance(target.engine, Engine):
+                    # This is a transfer from another iteration engine
+                    # (maybe a subclass).  We can handle that without
+                    # requiring a Processor, and that's useful for at
+                    # least unit testing (though maybe not anything
+                    # else; it's not clear why you'd have a transfer
+                    # between iteration engines otherwise).
+                    return target.engine.execute(target)
+                raise EngineError(
+                    f"Engine {self!r} cannot handle transfer from "
+                    f"{target.engine!r} to {destination!r}; "
+                    "use `lsst.daf.relation.Processor` first to handle this operation."
+                )
+            case MarkerRelation(target=target):
+                return self.execute(target)
         raise AssertionError("matches should be exhaustive and all branches should return")
 
     def convert_column_expression(

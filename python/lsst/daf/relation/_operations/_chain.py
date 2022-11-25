@@ -44,68 +44,13 @@ class Chain(BinaryOperation):
     def __str__(self) -> str:
         return "∪"
 
-    def apply(
-        self, lhs: Relation, rhs: Relation, *, lock: bool = False, strip_ordering: bool = False
-    ) -> Relation:
-        """Return a new relation that applies this operation to a pair of
-        existing relations.
-
-        `Relation.chain` is a convenience method that should be preferred to
-        constructing and applying a `Chain` directly.
-
-        Parameters
-        ----------
-        lhs : `Relation`
-            One relation to chain.
-        rhs : `Relation`
-            Other relation to chain to ``lhs``.  Must have the same columns
-            and engine as ``lhs``.
-        lock : `bool`, optional
-            Set `~Relation.is_locked` on the returned relation to this value.
-        strip_ordering : `bool`, optional
-            If `True`, remove upstream operations that impose row ordering when
-            the application of this operation makes that ordering unnecessary;
-            if `False` (default) raise `RowOrderError` instead (see
-            `Relation.expect_unordered`).
-
-        Returns
-        -------
-        relation : `Relation`
-            New relation with all rows from both relations.  If the engine
-            `preserves order <Engine.preserves_order>` for chains, all rows
-            from ``lhs`` will appear before all rows from ``rhs``, in their
-            original order.  This method never returns an operand directly,
-            even if the other has ``max_rows==0``, as it is assumed that even
-            relations with no rows are useful to preserve in the tree for
-            `diagnostics <Diagnostics>`.
-
-        Raises
-        ------
-        ColumnError
-            Raised if the two relations do not have the same columns.
-        EngineError
-            Raised if the two relations do not have the same engine.
-        RowOrderError
-            Raised if ``lhs`` or ``rhs`` is unnecessarily ordered; see
-            `Relation.expect_unordered`.
-        """
-        if not lhs.engine.preserves_order(self):
-            lhs = lhs.expect_unordered(
-                None
-                if strip_ordering
-                else f"Chain in engine {lhs.engine} will not preserve order when applied to {lhs}."
-            )
-        if not rhs.engine.preserves_order(self):
-            rhs = rhs.expect_unordered(
-                None
-                if strip_ordering
-                else f"Chain in engine {rhs.engine} will not preserve order when applied to {rhs}."
-            )
+    def _begin_apply(self, lhs: Relation, rhs: Relation) -> BinaryOperation:
+        # Docstring inherited.
         if lhs.engine != rhs.engine:
-            raise EngineError(f"Mismatched union engines: {lhs.engine} != {rhs.engine}.")
+            raise EngineError(f"Mismatched chain engines: {lhs.engine} != {rhs.engine}.")
         if lhs.columns != rhs.columns:
-            raise ColumnError(f"Mismatched union columns: {set(lhs.columns)} != {set(rhs.columns)}.")
-        return super().apply(lhs, rhs, lock=lock)
+            raise ColumnError(f"Mismatched chain columns: {set(lhs.columns)} != {set(rhs.columns)}.")
+        return self
 
     def applied_columns(self, lhs: Relation, rhs: Relation) -> Set[ColumnTag]:
         # Docstring inherited.

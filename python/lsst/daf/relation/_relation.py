@@ -32,7 +32,6 @@ from collections.abc import Sequence, Set
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from ._columns import ColumnTag
-from ._exceptions import RowOrderError
 
 if TYPE_CHECKING:
     from ._columns import ColumnExpression, Predicate
@@ -121,13 +120,6 @@ class Relation(Protocol):
     def is_locked(self) -> bool:
         """Whether this relation and those upstream of it should be considered
         fixed by tree-manipulation algorithms (`bool`).
-
-        Leaf relations are always locked, while most operation-based relations
-        default to unlocked but can be explicitly locked when created,
-        indicating that algorithms can consider inserting new operations into
-        the subtree, either as a way to intentionally change the tree's
-        behavior or to reorder operations in a way consistent with commutation
-        relations to aid in the tree's evaluation.
         """
         raise NotImplementedError()
 
@@ -172,9 +164,9 @@ class Relation(Protocol):
         Raises
         ------
         TypeError
-            Raised if this relation already has a payload.  `TypeError` is used
-            here for consistency with other attempts to assign to an attribute
-            of an immutable object.
+            Raised if this relation already has a payload, or can never have a
+            payload.  `TypeError` is used here for consistency with other
+            attempts to assign to an attribute of an immutable object.
         """
         raise NotImplementedError()
 
@@ -188,8 +180,6 @@ class Relation(Protocol):
         backtrack: bool = True,
         transfer: bool = False,
         require_preferred_engine: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
     ) -> Relation:
         """Return a new relation that adds a calculated column to this one.
 
@@ -222,13 +212,6 @@ class Relation(Protocol):
             preferred engine, raise `EngineError`.  If ``backtrack`` is also
             true, the exception is only raised if the backtrack attempt fails.
             Ignored if ``transfer`` is true.
-        lock : `bool`, optional
-            Set `is_locked` on the returned relation to this value.
-        strip_ordering : `bool`, optional
-            If `True`, remove upstream operations that impose row ordering when
-            the application of this operation makes that ordering unnecessary;
-            if `False` (default) raise `RowOrderError` instead (see
-            `expect_unordered`).
 
         Returns
         -------
@@ -245,14 +228,11 @@ class Relation(Protocol):
             Raised if ``require_preferred_engine=True`` and it was impossible
             to insert this operation in the preferred engine, or if the
             expression was not supported by the engine.
-        RowOrderError
-            Raised if ``self`` is unnecessarily ordered; see
-            `expect_unordered`.
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def chain(self, rhs: Relation, lock: bool = False, strip_ordering: bool = False) -> Relation:
+    def chain(self, rhs: Relation) -> Relation:
         """Return a new relation with all rows from this relation and another.
 
         This is a convenience method that constructs and applies a `Chain`
@@ -263,24 +243,17 @@ class Relation(Protocol):
         rhs : `Relation`
             Other relation to chain to ``self``.  Must have the same columns
             and engine as ``self``.
-        lock : `bool`, optional
-            Set `is_locked` on the returned relation to this value.
-        strip_ordering : `bool`, optional
-            If `True`, remove upstream operations that impose row ordering when
-            the application of this operation makes that ordering unnecessary;
-            if `False` (default) raise `RowOrderError` instead (see
-            `Relation.expect_unordered`).
 
         Returns
         -------
         relation : `Relation`
             New relation with all rows from both relations.  If the engine
-            `preserves order <Engine.preserves_order>` for chains, all rows
-            from ``self`` will appear before all rows from ``rhs``, in their
-            original order.  This method never returns an operand directly,
-            even if the other has ``max_rows==0``, as it is assumed that even
-            relations with no rows are useful to preserve in the tree for
-            `diagnostics <Diagnostics>`.
+            `preserves order <Engine.preserves_chain_order>` for chains, all
+            rows from ``self`` will appear before all rows from ``rhs``, in
+            their original order.  This method never returns an operand
+            directly, even if the other has ``max_rows==0``, as it is assumed
+            that even relations with no rows are useful to preserve in the tree
+            for `diagnostics <Diagnostics>`.
 
         Raises
         ------
@@ -297,14 +270,11 @@ class Relation(Protocol):
     @abstractmethod
     def without_duplicates(
         self,
-        unique_key: Sequence[ColumnTag] | None = None,
         *,
         preferred_engine: Engine | None = None,
         backtrack: bool = True,
         transfer: bool = False,
         require_preferred_engine: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
     ) -> Relation:
         """Return a new relation that removes any duplicate rows from this one.
 
@@ -313,10 +283,6 @@ class Relation(Protocol):
 
         Parameters
         ----------
-        unique_key : `~collections.abc.Sequence` [ `ColumnTag` ], optional
-            Columns that are sufficient to ensure full uniqueness.  If
-            provided, must be a subset of ``self.columns``.  Defaults to all
-            columns for which `ColumnTag.is_key` is `True`.
         preferred_engine : `Engine`, optional
             Engine that the operation would ideally be performed in.  If this
             is not equal to ``self.engine``, the ``backtrack``, ``transfer``,
@@ -337,13 +303,6 @@ class Relation(Protocol):
             preferred engine, raise `EngineError`.  If ``backtrack`` is also
             true, the exception is only raised if the backtrack attempt fails.
             Ignored if ``transfer`` is true.
-        lock : `bool`, optional
-            Set `is_locked` on the returned relation to this value.
-        strip_ordering : `bool`, optional
-            If `True`, remove upstream operations that impose row ordering when
-            the application of this operation makes that ordering unnecessary;
-            if `False` (default) raise `RowOrderError` instead (see
-            `Relation.expect_unordered`).
 
         Returns
         -------
@@ -354,16 +313,9 @@ class Relation(Protocol):
 
         Raises
         ------
-        ColumnError
-            Raised if ``unique_key`` is not given and no columns have
-            `ColumnTag.is_key` set to `True`, or if ``unique_key`` is given but
-            is not a subset of ``self.columns``.
         EngineError
             Raised if ``require_preferred_engine=True`` and it was impossible
             to insert this operation in the preferred engine.
-        RowOrderError
-            Raised if ``self`` is unnecessarily ordered; see
-            `expect_unordered`.
         """
         raise NotImplementedError()
 
@@ -375,8 +327,6 @@ class Relation(Protocol):
         *,
         backtrack: bool = True,
         transfer: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
     ) -> Relation:
         """Return a new relation that joins this one to the given one.
 
@@ -401,13 +351,6 @@ class Relation(Protocol):
             insert a new `Transfer` before the `Join`.  If ``backtrack`` is
             also true, the transfer is added only if the backtrack attempt
             fails.
-        lock : `bool`, optional
-            Set `is_locked` on the returned relation to this value.
-        strip_ordering : `bool`, optional
-            If `True`, remove upstream operations that impose row ordering when
-            the application of this operation makes that ordering unnecessary;
-            if `False` (default) raise `RowOrderError` instead (see
-            `expect_unordered`).
 
         Returns
         -------
@@ -442,8 +385,6 @@ class Relation(Protocol):
         name: str | None = None,
         *,
         name_prefix: str = "materialization",
-        lock: bool = True,
-        strip_ordering: bool = False,
     ) -> Relation:
         """Return a new relation that indicates that this relation's
         payload should be cached after it is first processed.
@@ -459,17 +400,10 @@ class Relation(Protocol):
             created via a call to `Engine.get_relation_name`.
         name_prefix : `str`, optional
             Prefix to pass to `Engine.get_relation_name`; ignored if ``name``
-            is provided.
-        lock : `bool`, optional
-            Set `is_locked` on the returned relation to this value.  Unlike
+            is provided.  Unlike
             most operations, `Materialization` relations are locked by default,
             since they reflect user intent to mark a specific tree as
             cacheable.
-        strip_ordering : `bool`, optional
-            If `True`, remove upstream operations that impose row ordering when
-            the application of this operation makes that ordering unnecessary;
-            if `False` (default) raise `RowOrderError` instead (see
-            `expect_unordered`).
 
         Returns
         -------
@@ -481,9 +415,6 @@ class Relation(Protocol):
 
         Raises
         ------
-        RowOrderError
-            Raised if ``self`` is unnecessarily ordered; see
-            `expect_unordered`.
 
         See Also
         --------
@@ -500,8 +431,6 @@ class Relation(Protocol):
         backtrack: bool = True,
         transfer: bool = False,
         require_preferred_engine: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
     ) -> Relation:
         """Return a new relation whose columns are a subset of this relation's.
 
@@ -533,13 +462,6 @@ class Relation(Protocol):
             preferred engine, raise `EngineError`.  If ``backtrack`` is also
             true, the exception is only raised if the backtrack attempt fails.
             Ignored if ``transfer`` is true.
-        lock : `bool`, optional
-            Set `is_locked` on the returned relation to this value.
-        strip_ordering : `bool`, optional
-            If `True`, remove upstream operations that impose row ordering when
-            the application of this operation makes that ordering unnecessary;
-            if `False` (default) raise `RowOrderError` instead (see
-            `Relation.expect_unordered`).
 
         Returns
         -------
@@ -554,9 +476,6 @@ class Relation(Protocol):
         EngineError
             Raised if ``require_preferred_engine=True`` and it was impossible
             to insert this operation in the preferred engine.
-        RowOrderError
-            Raised if ``self`` is unnecessarily ordered; see
-            `expect_unordered`.
         """
         raise NotImplementedError()
 
@@ -569,8 +488,6 @@ class Relation(Protocol):
         backtrack: bool = True,
         transfer: bool = False,
         require_preferred_engine: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
     ) -> Relation:
         """Return a new relation that filters out rows via a boolean
         expression.
@@ -603,13 +520,6 @@ class Relation(Protocol):
             preferred engine, raise `EngineError`.  If ``backtrack`` is also
             true, the exception is only raised if the backtrack attempt fails.
             Ignored if ``transfer`` is true.
-        lock : `bool`, optional
-            Set `is_locked` on the returned relation to this value.
-        strip_ordering : `bool`, optional
-            If `True`, remove upstream operations that impose row ordering when
-            the application of this operation makes that ordering unnecessary;
-            if `False` (default) raise `RowOrderError` instead (see
-            `Relation.expect_unordered`).
 
         Returns
         -------
@@ -627,9 +537,6 @@ class Relation(Protocol):
             Raised if ``require_preferred_engine=True`` and it was impossible
             to insert this operation in the preferred engine, or if the
             expression was not supported by the engine.
-        RowOrderError
-            Raised if ``self`` is unnecessarily ordered; see
-            `expect_unordered`.
         """
         raise NotImplementedError()
 
@@ -670,7 +577,6 @@ class Relation(Protocol):
         backtrack: bool = True,
         transfer: bool = False,
         require_preferred_engine: bool = False,
-        lock: bool = False,
     ) -> Relation:
         """Return a new relation that sorts rows according to a sequence of
         column expressions.
@@ -702,8 +608,6 @@ class Relation(Protocol):
             preferred engine, raise `EngineError`.  If ``backtrack`` is also
             true, the exception is only raised if the backtrack attempt fails.
             Ignored if ``transfer`` is true.
-        lock : `bool`, optional
-            Set `is_locked` on the returned relation to this value.
 
         Returns
         -------
@@ -726,9 +630,7 @@ class Relation(Protocol):
         raise NotImplementedError()
 
     @abstractmethod
-    def transferred_to(
-        self, destination: Engine, lock: bool = False, strip_unordered: bool = False
-    ) -> Relation:
+    def transferred_to(self, destination: Engine) -> Relation:
         """Return a new relation that transfers this relation to a new engine.
 
         This is a convenience method that constructs and applies a `Transfer`
@@ -738,13 +640,6 @@ class Relation(Protocol):
         ----------
         destination : `Engine`
             Engine for the new relation.
-        lock : `bool`, optional
-            Set `is_locked` on the returned relation to this value.
-        strip_ordering : `bool`, optional
-            If `True`, remove upstream operations that impose row ordering when
-            the application of this operation makes that ordering unnecessary;
-            if `False` (default) raise `RowOrderError` instead (see
-            `expect_unordered`).
 
         Returns
         -------
@@ -754,46 +649,6 @@ class Relation(Protocol):
 
         Raises
         ------
-        RowOrderError
-            Raised if ``self`` is unnecessarily ordered; see
-            `expect_unordered`.
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def expect_unordered(self, msg: str | None) -> Relation:
-        """Test that this relation is not unnecessarily ordered.
-
-        When applying an operation that would not preserve row order, this
-        method is first used to check that the relation is either:
-
-        - already unordered;
-        - "necessarily ordered", to satisfy the needs of some existing
-          operation (such as a slice) downstream of the ordering.
-
-        When this is not the case, the user is constructing a relation tree
-        that first makes an effort to order rows and then throws that ordering
-        away.
-
-        Parameters
-        ----------
-        msg : `str` or `None`
-            If a `str`, a message to raise with `RowOrderError` if the
-            relation is unnecessarily ordered.
-            If `None`, the operations that impose the unnecessary order should
-            be stripped out instead, with the adjusted relation tree returned.
-
-        Returns
-        -------
-        relation : `Relation`
-            A relation that is guaranteed to be either unordered or necessarily
-            ordered.
-
-        Raises
-        ------
-        RowOrderError
-            Raised if ``msg`` is not `None` and ``self`` is unnecessarily
-            ordered.
         """
         raise NotImplementedError()
 
@@ -825,11 +680,19 @@ class BaseRelation:
     """
 
     def __init_subclass__(cls) -> None:
-        assert cls.__name__ in {
-            "LeafRelation",
-            "UnaryOperationRelation",
-            "BinaryOperationRelation",
-        }, "Relation inheritance is closed to predefined types in daf_relation."
+        assert (
+            cls.__name__
+            in {
+                "LeafRelation",
+                "UnaryOperationRelation",
+                "BinaryOperationRelation",
+                "MarkerRelation",
+            }
+            or cls.__base__.__name__ != "Relation"
+        ), (
+            "Relation inheritance is closed to predefined types "
+            "in daf_relation and MarkerRelation subclasses."
+        )
 
     @property
     @_copy_relation_docs
@@ -843,13 +706,7 @@ class BaseRelation:
 
     @_copy_relation_docs
     def attach_payload(self: Relation, payload: Any) -> None:
-        if self.payload is None:
-            object.__setattr__(self, "payload", payload)
-        else:
-            raise TypeError(
-                f"Cannot attach payload {payload} to relation {self} with existing payload "
-                f"{self.payload}; relation payloads are write-once."
-            )
+        raise TypeError(f"Cannot attach payload {payload} to relation {self}.")
 
     @_copy_relation_docs
     def with_calculated_column(
@@ -861,8 +718,6 @@ class BaseRelation:
         backtrack: bool = True,
         transfer: bool = False,
         require_preferred_engine: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
     ) -> Relation:
         from ._operations import Calculation
 
@@ -872,38 +727,31 @@ class BaseRelation:
             backtrack=backtrack,
             transfer=transfer,
             require_preferred_engine=require_preferred_engine,
-            lock=lock,
-            strip_ordering=strip_ordering,
         )
 
     @_copy_relation_docs
-    def chain(self: Relation, rhs: Relation, lock: bool = False, strip_ordering: bool = False) -> Relation:
+    def chain(self: Relation, rhs: Relation) -> Relation:
         from ._operations import Chain
 
-        return Chain().apply(self, rhs, lock=lock, strip_ordering=strip_ordering)
+        return Chain().apply(self, rhs)
 
     @_copy_relation_docs
     def without_duplicates(
         self: Relation,
-        unique_key: Sequence[ColumnTag] | None = None,
         *,
         preferred_engine: Engine | None = None,
         backtrack: bool = True,
         transfer: bool = False,
         require_preferred_engine: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
     ) -> Relation:
         from ._operations import Deduplication
 
-        return Deduplication(unique_key).apply(
+        return Deduplication().apply(
             self,
             preferred_engine=preferred_engine,
             backtrack=backtrack,
             transfer=transfer,
             require_preferred_engine=require_preferred_engine,
-            lock=lock,
-            strip_ordering=strip_ordering,
         )
 
     @_copy_relation_docs
@@ -914,16 +762,14 @@ class BaseRelation:
         *,
         backtrack: bool = True,
         transfer: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
     ) -> Relation:
         from ._columns import Predicate
         from ._operations import Join
 
         return (
             Join(predicate if predicate is not None else Predicate.literal(True))
-            .partial(rhs, strip_ordering=strip_ordering)
-            .apply(self, backtrack=backtrack, transfer=transfer, lock=lock, strip_ordering=strip_ordering)
+            .partial(rhs)
+            .apply(self, backtrack=backtrack, transfer=transfer)
         )
 
     @_copy_relation_docs
@@ -932,14 +778,8 @@ class BaseRelation:
         name: str | None = None,
         *,
         name_prefix: str = "materialization",
-        lock: bool = True,
-        strip_ordering: bool = False,
     ) -> Relation:
-        from ._operations import Materialization
-
-        return Materialization(name).apply(
-            self, name_prefix=name_prefix, lock=lock, strip_ordering=strip_ordering
-        )
+        return self.engine.materialize(self, name, name_prefix)
 
     @_copy_relation_docs
     def with_only_columns(
@@ -950,19 +790,15 @@ class BaseRelation:
         backtrack: bool = True,
         transfer: bool = False,
         require_preferred_engine: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
     ) -> Relation:
         from ._operations import Projection
 
-        return Projection(columns).apply(
+        return Projection(frozenset(columns)).apply(
             self,
             preferred_engine=preferred_engine,
             backtrack=backtrack,
             transfer=transfer,
             require_preferred_engine=require_preferred_engine,
-            lock=lock,
-            strip_ordering=strip_ordering,
         )
 
     @_copy_relation_docs
@@ -974,8 +810,6 @@ class BaseRelation:
         backtrack: bool = True,
         transfer: bool = False,
         require_preferred_engine: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
     ) -> Relation:
         from ._operations import Selection
 
@@ -985,8 +819,6 @@ class BaseRelation:
             backtrack=backtrack,
             transfer=transfer,
             require_preferred_engine=require_preferred_engine,
-            lock=lock,
-            strip_ordering=strip_ordering,
         )
 
     @_copy_relation_docs
@@ -1008,63 +840,17 @@ class BaseRelation:
         backtrack: bool = True,
         transfer: bool = False,
         require_preferred_engine: bool = False,
-        lock: bool = False,
     ) -> Relation:
         from ._operations import Sort
 
-        return Sort(terms).apply(
+        return Sort(tuple(terms)).apply(
             self,
             preferred_engine=preferred_engine,
             backtrack=backtrack,
             transfer=transfer,
             require_preferred_engine=require_preferred_engine,
-            lock=lock,
         )
 
     @_copy_relation_docs
-    def transferred_to(
-        self: Relation, destination: Engine, lock: bool = False, strip_ordering: bool = False
-    ) -> Relation:
-        from ._operations import Transfer
-
-        return Transfer(destination).apply(self, lock=lock, strip_ordering=strip_ordering)
-
-    @_copy_relation_docs
-    def expect_unordered(self: Relation, msg: str | None = None) -> Relation:
-        from ._operation_relations import BinaryOperationRelation, UnaryOperationRelation
-        from ._operations import Chain
-        from ._unary_operation import Reordering, RowFilter
-
-        if self.is_locked:
-            return self
-
-        match self:
-            case UnaryOperationRelation(operation=operation, target=target):
-                match operation:
-                    case Reordering():
-                        if msg is not None:
-                            raise RowOrderError(msg)
-                        return target.expect_unordered(msg)
-                    case RowFilter() if operation.is_order_dependent:
-                        # This operation requires ordering upstream, even if
-                        # that ordering is not required downstream; stop here.
-                        return self
-                if not target.engine.preserves_order(operation):
-                    # This operation already does not preserve order, so there
-                    # should not be reorderings upstream.
-                    return self
-                # There might be reorderings upstream; recurse.
-                if (new_target := target.expect_unordered(msg)) is not target:
-                    return operation.apply(new_target)
-                else:
-                    return self
-            case BinaryOperationRelation(operation=Chain() as operation, lhs=lhs, rhs=rhs):
-                if not self.engine.preserves_order(operation):
-                    return self
-                # There might be reorderings upstream; recurse.
-                new_lhs = lhs.expect_unordered(msg)
-                new_rhs = rhs.expect_unordered(msg)
-                if new_lhs is lhs and new_rhs is rhs:
-                    return self
-                return operation.apply(lhs, rhs)
-        return self
+    def transferred_to(self: Relation, destination: Engine) -> Relation:
+        return destination.transfer(self)

@@ -21,17 +21,15 @@
 
 from __future__ import annotations
 
-__all__ = ("BinaryOperation",)
+__all__ = ("BinaryOperation", "IgnoreOne")
 
+import dataclasses
 from abc import ABC, abstractmethod
 from collections.abc import Set
-from typing import TYPE_CHECKING
+from typing import final
 
 from ._columns import ColumnTag
 from ._relation import Relation
-
-if TYPE_CHECKING:
-    from ._engine import Engine
 
 
 class BinaryOperation(ABC):
@@ -65,21 +63,20 @@ class BinaryOperation(ABC):
         assert cls.__name__ in {
             "Join",
             "Chain",
+            "IgnoreOne",
         }, "BinaryOperation inheritance is closed to predefined types in daf_relation."
 
-    @abstractmethod
-    def apply(self, lhs: Relation, rhs: Relation, *, lock: bool) -> Relation:
+    @final
+    def apply(self, lhs: Relation, rhs: Relation) -> Relation:
         """Create a new relation that represents the action of this operation
         on a pair of existing relations.
 
         Parameters
         ----------
         lhs : `Relation`
-            On relation the operation will act on.
+            One relation the operation will act on.
         rhs : `Relation`
             The other relation the operation will act on.
-        lock : `bool`, optional
-            Set `Relation.is_locked` on the result to this value.
 
         Returns
         -------
@@ -97,15 +94,54 @@ class BinaryOperation(ABC):
         EngineError
             Raised if the operation could not be applied due to problems with
             the target relations' engine(s).
-        RowOrderError
-            Raised if ``lhs`` or ``rhs`` is unnecessarily ordered; see
-            `Relation.expect_unordered`.
+        """
+        operation = self._begin_apply(lhs, rhs)
+        return lhs.engine.append_binary(operation, lhs, rhs)
+
+    def _begin_apply(self, lhs: Relation, rhs: Relation) -> BinaryOperation:
+        """A customization hook for the beginning of operation application.
+
+        Parameter
+        ---------
+        lhs : `Relation`
+            One relation the operation should act on.
+        rhs : `Relation`
+            The other relation the operation should act on.
+
+        Returns
+        -------
+        operation : `BinaryOperation`
+            The operation to actually apply.  The default implementation
+            returns ``self``.
 
         Notes
         -----
-        Most concrete implementations support additional optional keyword
-        arguments that provide more control over where the operation is
-        inserted; see operation subclass documentation for details.
+        This method provides an opportunity for operations to establish any
+        invariants that must be satisfied only when the operation is part of
+        a relation.
+        """
+        return self
+
+    def _finish_apply(self, lhs: Relation, rhs: Relation) -> Relation:
+        """A customization hook for the end of operation application.
+
+        Parameters
+        ----------
+        target : `Relation`
+            Relation the operation will act upon directly.
+
+        Returns
+        -------
+        applied : `Relation`
+            Result of applying this operation to the given target.  Usually -
+            but not always - a `UnaryOperationRelation` that holds ``self`` and
+            ``target``.
+
+        Notes
+        -----
+        This method provides an opportunity for operations to change the kind
+        of relation produced (the default implementation constructs a
+        `BinaryOperationRelation`).
         """
         from ._operation_relations import BinaryOperationRelation
 
@@ -114,26 +150,7 @@ class BinaryOperation(ABC):
             lhs=lhs,
             rhs=rhs,
             columns=self.applied_columns(lhs, rhs),
-            is_locked=lock,
         )
-
-    def applied_engine(self, lhs: Relation, rhs: Relation) -> Engine:
-        """Return the engine of the relation that results from applying this
-        operation to the given targets.
-
-        Parameters
-        ----------
-        lhs : `Relation`
-            On relation the operation will act on.
-        rhs : `Relation`
-            The other relation the operation will act on.
-
-        Returns
-        -------
-        engine : `Engine`
-            Engine a new relation would have.
-        """
-        return lhs.engine
 
     @abstractmethod
     def applied_columns(self, lhs: Relation, rhs: Relation) -> Set[ColumnTag]:
@@ -191,3 +208,33 @@ class BinaryOperation(ABC):
             Maximum number of rows the new relation would have.
         """
         raise NotImplementedError()
+
+
+@dataclasses.dataclass
+class IgnoreOne(BinaryOperation):
+    """A binary operation that passes through one of its operands and ignores
+    the other.
+    """
+
+    ignore_lhs: bool
+    """Whether the ignored operand is the left-hand-side one (`bool`).
+    """
+
+    def applied_columns(self, lhs: Relation, rhs: Relation) -> Set[ColumnTag]:
+        # Docstring inherited.
+        return self._finish_apply(lhs, rhs).columns
+
+    def applied_min_rows(self, lhs: Relation, rhs: Relation) -> int:
+        # Docstring inherited.
+        return self._finish_apply(lhs, rhs).min_rows
+
+    def applied_max_rows(self, lhs: Relation, rhs: Relation) -> int | None:
+        # Docstring inherited.
+        return self._finish_apply(lhs, rhs).max_rows
+
+    def _finish_apply(self, lhs: Relation, rhs: Relation) -> Relation:
+        # Docstring inherited.
+        if self.ignore_lhs:
+            return rhs
+        else:
+            return lhs

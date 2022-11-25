@@ -15,10 +15,13 @@ The iteration engine does not currently support join operations.
 The `~Engine.execute` method is the main entry point for evaluating trees of relations that are purely in this engine, transforming them into its payload type, `RowIterable`, which represents a row as a `collections.abc.Mapping` with `.ColumnTag` keys.
 All operations other than `.Reordering` preserve order.
 
+This engine supports "backtracking insertion", in which an operation that is logically appended to an iteration-engine relation is actually inserted in a different upstream engine, as long as it commutes with the intervening iteration-engine operations.
+This is enabled by passing the ``preferred_engine`` argument to `.UnaryOperation.apply` or the various `.Relation` convenience methods that forward to it, with ``backtrack=True`` (the default).
+
 Generally, execution is lazy; operations are performed row-by-row by returning `RowIterable` (the engine's `~.Relation.payload` type) instances backed by generators, with a few exceptions:
 In particular:
 
-- `.Deduplication` operations gather all unique rows into a `dict` (inside a `RowMapping`;
+- `.Deduplication` operations gather all unique rows into a `dict` (inside a `RowMapping`);
 - `.Sort` operations gather all rows into a `list` (inside a `RowSequence`);
 - `.Materialization` operations gather all rows into a `list` unless they are already in a `dict` or `list` (via `RowIterable.materialized`);
 - `.Slice` operations on a `RowSequence` are computed directly, creating another `RowSequence` (all other slices are lazy).

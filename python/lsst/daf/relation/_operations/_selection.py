@@ -28,9 +28,9 @@ from collections.abc import Set
 from typing import TYPE_CHECKING, final
 
 from .._columns import ColumnTag, Predicate, flatten_logical_and
-from .._exceptions import ColumnError, EngineError
-from .._operation_relations import BinaryOperationRelation, UnaryOperationRelation
-from .._unary_operation import RowFilter
+from .._exceptions import ColumnError
+from .._operation_relations import UnaryOperationRelation
+from .._unary_operation import Identity, RowFilter, UnaryCommutator, UnaryOperation
 
 if TYPE_CHECKING:
     from .._engine import Engine
@@ -72,78 +72,16 @@ class Selection(RowFilter):
     def __str__(self) -> str:
         return f"σ[{self.predicate}]"
 
-    def apply(
-        self,
-        target: Relation,
-        *,
-        preferred_engine: Engine | None = None,
-        backtrack: bool = True,
-        transfer: bool = False,
-        require_preferred_engine: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
-    ) -> Relation:
-        """Return a new relation that applies this selection to an existing
-        relation.
+    def is_supported_by(self, engine: Engine) -> bool:
+        # Docstring inherited.
+        return self.predicate.is_supported_by(engine)
 
-        `Relation.with_rows_satisfying` is a convenience method that should
-        be preferred to constructing and applying a `Selection` directly.
-
-
-        Parameters
-        ----------
-        target : `Relation`
-            Relation this operation will act upon.
-        preferred_engine : `Engine`, optional
-            Engine that the operation would ideally be performed in.  If this
-            is not equal to ``self.engine``, the ``backtrack``, ``transfer``,
-            and ``require_preferred_engine`` arguments control the behavior.
-        backtrack : `bool`, optional
-            If `True` (default) and the current engine is not the preferred
-            engine, attempt to insert this selection before a transfer
-            upstream of the current relation, as long as this can be done
-            without breaking up any locked relations or changing the resulting
-            relation content.
-        transfer : `bool`, optional
-            If `True` (`False` is default) and the current engine is not the
-            preferred engine, insert a new `Transfer` before the
-            `Selection`.  If ``backtrack`` is also true, the transfer is
-            added only if the backtrack attempt fails.
-        require_preferred_engine : `bool`, optional
-            If `True` (`False` is default) and the current engine is not the
-            preferred engine, raise `EngineError`.  If ``backtrack`` is also
-            true, the exception is only raised if the backtrack attempt fails.
-            Ignored if ``transfer`` is true.
-        lock : `bool`, optional
-            Set `~Relation.is_locked` on the returned relation to this value.
-        strip_ordering : `bool`, optional
-            If `True`, remove upstream operations that impose row ordering when
-            the application of this operation makes that ordering unnecessary;
-            if `False` (default) raise `RowOrderError` instead (see
-            `Relation.expect_unordered`).
-
-        Returns
-        -------
-        relation : `Relation`
-            New relation with only the rows that satisfy `predicate`.
-            May be ``target`` if `predicate` is
-            `trivially True <Predicate.as_trivial>`.
-
-        Raises
-        ------
-        ColumnError
-            Raised if ``predicate.columns_required`` is not a subset of
-            ``self.columns``.
-        EngineError
-            Raised if ``require_preferred_engine=True`` and it was impossible
-            to insert this operation in the preferred engine, or if the
-            expression was not supported by the engine.
-        RowOrderError
-            Raised if ``self`` is unnecessarily ordered; see
-            `Relation.expect_unordered`.
-        """
+    def _begin_apply(
+        self, target: Relation, preferred_engine: Engine | None
+    ) -> tuple[UnaryOperation, Engine]:
+        # Docstring inherited.
         if self.predicate.as_trivial() is True:
-            return target
+            return Identity(), target.engine
         # We don't simplify the trivially-false predicate case, in keeping with
         # our policy of leaving doomed relations in place for diagnostics
         # to report on later.
@@ -152,88 +90,43 @@ class Selection(RowFilter):
                 f"Predicate {self.predicate} for target relation {target} needs "
                 f"columns {self.predicate.columns_required - target.columns}."
             )
-        if not target.engine.preserves_order(self):
-            target = target.expect_unordered(
-                None
-                if strip_ordering
-                else f"Selection in engine {target.engine} will not preserve order when applied to {target}."
-            )
-        if preferred_engine is not None and preferred_engine != target.engine:
-            if backtrack and (result := self._insert_recursive(target, preferred_engine, lock)):
-                return result
-            elif transfer:
-                from ._transfer import Transfer
+        return super()._begin_apply(target, preferred_engine)
 
-                target = Transfer(preferred_engine).apply(target)
-            elif require_preferred_engine:
-                raise EngineError(
-                    f"No way to apply selection with predicate {self.predicate} "
-                    f"with required engine {preferred_engine}."
-                )
-        if not self.predicate.is_supported_by(target.engine):
-            raise EngineError(f"Predicate {self.predicate} does not support engine {target.engine}.")
-        match target:
-            case UnaryOperationRelation(operation=Selection(predicate=other_predicate), target=nested_target):
-                return Selection(predicate=other_predicate.logical_and(self.predicate)).apply(nested_target)
-        return super().apply(target, lock=lock)
-
-    def _insert_recursive(self, target: Relation, preferred_engine: Engine, lock: bool) -> Relation | None:
-        """Recursive implementation for `apply`.
-
-        See that method's documentation for details.
-        """
-        from ._chain import Chain
-        from ._join import Join
-
-        if target.is_locked:
-            return None
-        match target:
-            case UnaryOperationRelation(operation=operation, target=next_target):
-                if operation.is_count_dependent:
-                    return None
-                if operation.is_order_dependent and not next_target.engine.preserves_order(self):
-                    return None
-                if not self.columns_required <= next_target.columns:
-                    return None
-                # If other checks above are satisfied, a Selection commutes
-                # through:
-                # - Calculations;
-                # - Deduplications;
-                # - Projections;
-                # - Marker subclasses;
-                # - other RowFilter subclasses;
-                # - Reordering subclasses;
-                # while Identity and PartialJoin never actually appear in
-                # UnaryOperationRelations, as their apply() methods guarantee.
-                if next_target.engine == preferred_engine:
-                    return operation.apply(self.apply(next_target, lock=lock))
-                if new_target := self._insert_recursive(next_target, preferred_engine, lock):
-                    return operation.apply(new_target)
-            case BinaryOperationRelation(operation=operation, lhs=next_lhs, rhs=next_rhs):
-                match operation:
-                    case Join():
-
-                        def _try_branch(branch: Relation) -> Relation:
-                            if branch.columns >= self.columns_required:
-                                return self._insert_recursive(branch, preferred_engine, lock) or branch
-                            else:
-                                return branch
-
-                        # We can try to insert the selection into either branch
-                        # or both branches - applying it everywhere it is valid
-                        # as early as possible is usually desirable.
-                        new_join_lhs = _try_branch(next_lhs)
-                        new_join_rhs = _try_branch(next_rhs)
-                        del _try_branch  # helps garbage collector a lot
-                        if new_join_lhs is not next_lhs or new_join_rhs is not next_rhs:
-                            return operation.apply(new_join_lhs, new_join_rhs)
-                    case Chain():
-                        new_union_lhs = self._insert_recursive(next_lhs, preferred_engine, lock)
-                        new_union_rhs = self._insert_recursive(next_rhs, preferred_engine, lock)
-                        if new_union_lhs and new_union_rhs:
-                            return operation.apply(new_union_lhs, new_union_rhs)
-        return None
+    def _finish_apply(self, target: Relation) -> Relation:
+        # Docstring inherited.
+        if self.predicate.as_trivial() is True:
+            return target
+        else:
+            return super()._finish_apply(target)
 
     def applied_min_rows(self, target: Relation) -> int:
         # Docstring inherited.
         return 0
+
+    def commute(self, current: UnaryOperationRelation) -> UnaryCommutator:
+        # Docstring inherited.
+        if not self.columns_required <= current.target.columns:
+            return UnaryCommutator(
+                first=None,
+                second=current.operation,
+                done=False,
+                messages=(
+                    f"{current.target} is missing columns "
+                    f"{set(self.columns_required - current.target.columns)}",
+                ),
+            )
+        if current.operation.is_count_dependent:
+            return UnaryCommutator(
+                first=None,
+                second=current.operation,
+                done=False,
+                messages=(f"{current.operation} is count-dependent",),
+            )
+        return UnaryCommutator(self, current.operation)
+
+    def simplify(self, upstream: UnaryOperation) -> UnaryOperation | None:
+        # Docstring inherited.
+        match upstream:
+            case Selection(predicate=other_predicate):
+                return Selection(predicate=other_predicate.logical_and(self.predicate))
+        return None

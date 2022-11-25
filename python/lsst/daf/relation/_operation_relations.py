@@ -28,7 +28,7 @@ __all__ = (
 
 import dataclasses
 from collections.abc import Set
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, final
+from typing import TYPE_CHECKING, Literal, final
 
 from ._leaf_relation import LeafRelation
 from ._relation import BaseRelation, Relation
@@ -40,13 +40,8 @@ if TYPE_CHECKING:
     from ._unary_operation import UnaryOperation
 
 
-_U = TypeVar("_U", bound="UnaryOperation")
-_B = TypeVar("_B", bound="BinaryOperation")
-
-
-@final
 @dataclasses.dataclass(frozen=True)
-class UnaryOperationRelation(BaseRelation, Generic[_U]):
+class UnaryOperationRelation(BaseRelation):
     """A concrete `Relation` that represents the action of a `UnaryOperation`
     on a target `Relation`.
 
@@ -56,7 +51,7 @@ class UnaryOperationRelation(BaseRelation, Generic[_U]):
     operations classes.
     """
 
-    operation: _U
+    operation: UnaryOperation
     """The unary operation whose action this relation represents
     (`UnaryOperation`).
     """
@@ -69,31 +64,27 @@ class UnaryOperationRelation(BaseRelation, Generic[_U]):
     """The columns in this relation (`~collections.abc.Set` [ `ColumnTag` ] ).
     """
 
-    payload: Any = dataclasses.field(repr=False, compare=False, default=None)
-    """The engine-specific contents of the relation.
+    @property
+    def payload(self) -> None:
+        """The engine-specific contents of the relation.
 
-    This will always be `None` for most operations, with `Materialization`
-    operations a notable exception (and the only exception in
-    `lsst.daf.relation` itself).
-    """
+        This is always `None` for binary operation relations.
+        """
+        return None
 
-    is_locked: bool = dataclasses.field(repr=False, compare=False, default=False)
-    """Whether this relation and those upstream of it should be considered
-    fixed by tree-manipulation algorithms (`bool`).
-
-    Most operation-based relations default to unlocked but can be explicitly
-    locked when created, indicating that algorithms can consider inserting new
-    operations into the subtree, either as a way to intentionally change the
-    tree's behavior or to reorder operations in a way consistent with
-    commutation relations to aid in the tree's evaluation.
-    """
+    @property
+    def is_locked(self) -> Literal[False]:
+        """Whether this relation and those upstream of it should be considered
+        fixed by tree-manipulation algorithms (`bool`).
+        """
+        return False
 
     @property
     def engine(self) -> Engine:
         """The engine that is responsible for interpreting this relation
         (`Engine`).
         """
-        return self.operation.applied_engine(self.target)
+        return self.target.engine
 
     @property
     def min_rows(self) -> int:
@@ -112,10 +103,31 @@ class UnaryOperationRelation(BaseRelation, Generic[_U]):
     def __str__(self) -> str:
         return f"{self.operation!s}({self.target!s})"
 
+    def reapply(self, target: Relation) -> Relation:
+        """Reapply this relation's operation with a possibly-new target.
+
+        Parameters
+        ----------
+        target : `Relation`
+            Possibly-new target.
+
+        Returns
+        -------
+        relation : `Relation`
+            Relation that applies `operation` to the new target.  Will be
+            ``self`` if ``target is self.target`` (this avoidance of an
+            unnecessary new `UnaryOperationRelation` instance is the main
+            reason for this convenience method's existence).
+        """
+        if target is self.target:
+            return self
+        else:
+            return self.operation.apply(target)
+
 
 @final
 @dataclasses.dataclass(frozen=True)
-class BinaryOperationRelation(BaseRelation, Generic[_B]):
+class BinaryOperationRelation(BaseRelation):
     """A concrete `Relation` that represents the action of a `BinaryOperation`
     on a pair of target `Relation` objects.
 
@@ -125,7 +137,7 @@ class BinaryOperationRelation(BaseRelation, Generic[_B]):
     operations classes.
     """
 
-    operation: _B
+    operation: BinaryOperation
     """The binary operation whose action this relation represents
     (`BinaryOperation`).
     """
@@ -142,23 +154,19 @@ class BinaryOperationRelation(BaseRelation, Generic[_B]):
     """The columns in this relation (`~collections.abc.Set` [ `ColumnTag` ] ).
     """
 
-    is_locked: bool = dataclasses.field(repr=False, compare=False, default=False)
-    """Whether this relation and those upstream of it should be considered
-    fixed by tree-manipulation algorithms (`bool`).
-
-    Most operation-based relations default to unlocked but can be explicitly
-    locked when created, indicating that algorithms can consider inserting new
-    operations into the subtree, either as a way to intentionally change the
-    tree's behavior or to reorder operations in a way consistent with
-    commutation relations to aid in the tree's evaluation.
-    """
+    @property
+    def is_locked(self) -> Literal[False]:
+        """Whether this relation and those upstream of it should be considered
+        fixed by tree-manipulation algorithms (`bool`).
+        """
+        return False
 
     @property
     def engine(self) -> Engine:
         """The engine that is responsible for interpreting this relation
         (`Engine`).
         """
-        return self.operation.applied_engine(self.lhs, self.rhs)
+        return self.lhs.engine
 
     @property
     def payload(self) -> None:
@@ -198,3 +206,26 @@ class BinaryOperationRelation(BaseRelation, Generic[_B]):
                 if type(rhs_operation) is type(self.operation):  # noqa: E721
                     rhs_str = str(self.rhs)
         return f"{lhs_str} {self.operation!s} {rhs_str}"
+
+    def reapply(self, lhs: Relation, rhs: Relation) -> Relation:
+        """Reapply this relation's operation with possibly-new targets.
+
+        Parameters
+        ----------
+        lhs : `Relation`
+            One possibly-new target.
+        rhs : `Relation`
+            The other possibly-new target.
+
+        Returns
+        -------
+        relation : `Relation`
+            Relation that applies `operation` to the new targets.  Will be
+            ``self`` if ``lhs is self.lhs and rhs is self.rhs`` (this avoidance
+            of an unnecessary new `BinaryOperationRelation` instance is the
+            main reason for this convenience method's existence).
+        """
+        if lhs is self.lhs and rhs is self.rhs:
+            return self
+        else:
+            return self.operation.apply(lhs, rhs)

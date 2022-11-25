@@ -28,9 +28,9 @@ from collections.abc import Set
 from typing import TYPE_CHECKING, Literal, final
 
 from .._columns import ColumnTag
-from .._exceptions import ColumnError, EngineError
-from .._operation_relations import BinaryOperationRelation, UnaryOperationRelation
-from .._unary_operation import UnaryOperation
+from .._exceptions import ColumnError
+from .._operation_relations import UnaryOperationRelation
+from .._unary_operation import Identity, UnaryCommutator, UnaryOperation
 
 if TYPE_CHECKING:
     from .._engine import Engine
@@ -48,8 +48,8 @@ class Projection(UnaryOperation):
     (as opposed to just propagating duplicates).
     """
 
-    columns: Set[ColumnTag]
-    """The columns to be kept (`~collections.abc.Set` [ `ColumnTag` ]).
+    columns: frozenset[ColumnTag]
+    """The columns to be kept (`frozenset` [ `ColumnTag` ]).
     """
 
     @property
@@ -70,194 +70,22 @@ class Projection(UnaryOperation):
     def __str__(self) -> str:
         return f"Π[{', '.join(str(tag) for tag in self.columns)}]"
 
-    def apply(
-        self,
-        target: Relation,
-        *,
-        preferred_engine: Engine | None = None,
-        backtrack: bool = True,
-        transfer: bool = False,
-        require_preferred_engine: bool = False,
-        lock: bool = False,
-        strip_ordering: bool = False,
-    ) -> Relation:
-        """Return a new relation that applies this projection.
-
-        `Relation.with_only_columns` is a convenience method that should
-        be preferred to constructing and applying a `Projection` directly.
-
-        Parameters
-        ----------
-        target : `Relation`
-            Relation the calculation will act upon.
-        preferred_engine : `Engine`, optional
-            Engine that the operation would ideally be performed in.  If this
-            is not equal to ``self.engine``, the ``backtrack``, ``transfer``,
-            and ``require_preferred_engine`` arguments control the behavior.
-        backtrack : `bool`, optional
-            If `True` (default) and the current engine is not the preferred
-            engine, attempt to insert this projection before a transfer
-            upstream of the current relation, as long as this can be done
-            without breaking up any locked relations or changing the resulting
-            relation content.
-        transfer : `bool`, optional
-            If `True` (`False` is default) and the current engine is not the
-            preferred engine, insert a new `Transfer` before the
-            `Projection`.  If ``backtrack`` is also true, the transfer is
-            added only if the backtrack attempt fails.
-        require_preferred_engine : `bool`, optional
-            If `True` (`False` is default) and the current engine is not the
-            preferred engine, raise `EngineError`.  If ``backtrack`` is also
-            true, the exception is only raised if the backtrack attempt fails.
-            Ignored if ``transfer`` is true.
-        lock : `bool`, optional
-            Set `~Relation.is_locked` on the returned relation to this value.
-        strip_ordering : `bool`, optional
-            If `True`, remove upstream operations that impose row ordering when
-            the application of this operation makes that ordering unnecessary;
-            if `False` (default) raise `RowOrderError` instead (see
-            `expect_unordered`).
-
-        Returns
-        -------
-        relation : `Relation`
-            New relation with only the given columns.  Will be ``self`` if
-            ``columns == self.columns``.
-
-        Raises
-        ------
-        ColumnError
-            Raised if `columns` is not a subset of ``target.columns``.
-        EngineError
-            Raised if ``require_preferred_engine=True`` and it was impossible
-            to insert this operation in the preferred engine.
-        RowOrderError
-            Raised if ``self`` is unnecessarily ordered; see
-            `Relation.expect_unordered`.
-        """
+    def _begin_apply(
+        self, target: Relation, preferred_engine: Engine | None
+    ) -> tuple[UnaryOperation, Engine]:
         if self.columns == target.columns:
-            return target
-        if not target.engine.preserves_order(self):
-            target = target.expect_unordered(
-                None
-                if strip_ordering
-                else f"Projection in engine {target.engine} will not preserve order when applied to {target}."
-            )
+            return Identity(), target.engine
         if not self.columns <= target.columns:
             raise ColumnError(
                 f"Cannot project column(s) {set(self.columns) - target.columns} "
                 f"that are not present in the target relation {target}."
             )
-        if preferred_engine is not None and preferred_engine != target.engine:
-            if backtrack:
-                target = self._insert_recursive(target, preferred_engine, lock)
-                if target.columns == self.columns:
-                    return target
-            if transfer:
-                from ._transfer import Transfer
+        return super()._begin_apply(target, preferred_engine)
 
-                target = Transfer(preferred_engine).apply(target)
-            elif require_preferred_engine:
-                raise EngineError(
-                    f"No way to apply projection to columns {set(self.columns)} "
-                    f"with required engine {preferred_engine}."
-                )
-        from ._calculation import Calculation
-
-        # See similar checks in _insert_recursive for explanations; need to do
-        # these here, too, for when that's never called.
-        match target:
-            case UnaryOperationRelation(operation=Projection(), target=nested_target):
-                return self.apply(nested_target)
-            case UnaryOperationRelation(
-                operation=Calculation(tag=tag), target=nested_target
-            ) if tag not in self.columns:
-                return self.apply(nested_target)
-        return super().apply(target, lock=lock)
-
-    def _insert_recursive(
-        self,
-        target: Relation,
-        preferred_engine: Engine,
-        lock: bool,
-    ) -> Relation:
-        """Recursive implementation for `apply`.
-
-        See that method's documentation for details.
-        """
-        from ._calculation import Calculation
-        from ._chain import Chain
-        from ._join import Join
-
-        if target.is_locked:
+    def _finish_apply(self, target: Relation) -> Relation:
+        if self.columns == target.columns:
             return target
-        match target:
-            case UnaryOperationRelation(operation=operation, target=next_target):
-                recurse_with: Projection = self
-                reapply_after: UnaryOperation | None = operation
-                match operation:
-                    case Projection():
-                        # We can just drop any existing Projection as this one
-                        # supersedes it; by construction the new one has a
-                        # subset of the original's columns.
-                        reapply_after = None
-                    case Calculation(tag=tag) if tag not in self.columns:
-                        # Projection will drop the column added by the
-                        # Calculation, so it might as well have never
-                        # existed.
-                        reapply_after = None
-                        recurse_with = self
-                if not self.columns >= operation.columns_required:
-                    # Can't move the entire projection past this operation;
-                    # move what we can, and allow the rest to be handled by
-                    # other options back in `apply`.
-                    recurse_with = Projection(self.columns | operation.columns_required)
-                else:
-                    recurse_with = self
-                if operation.is_order_dependent and not next_target.engine.preserves_order(self):
-                    return target
-                if next_target.engine == preferred_engine:
-                    return operation.apply(self.apply(next_target, lock=lock))
-                new_target = recurse_with._insert_recursive(next_target, preferred_engine, lock)
-                if reapply_after is operation and new_target is next_target:
-                    return target  # avoid spurious copies by returning original
-                if reapply_after is not None:
-                    return reapply_after.apply(new_target)
-            case BinaryOperationRelation(operation=operation, lhs=next_lhs, rhs=next_rhs):
-                match operation:
-                    case Join(common_columns=common_columns, predicate=predicate):
-                        recurse_columns = self.columns | common_columns | predicate.columns_required
-
-                        def _try_branch(branch: Relation) -> Relation:
-                            if recurse_columns >= branch.columns:
-                                return branch
-                            else:
-                                new_projection = Projection(recurse_columns & branch.columns)
-                                return new_projection._insert_recursive(branch, preferred_engine, lock)
-
-                        new_join_lhs = _try_branch(next_lhs)
-                        new_join_rhs = _try_branch(next_rhs)
-                        if new_join_lhs is next_lhs and new_join_rhs is next_rhs:
-                            return target
-                        else:
-                            return operation.apply(new_join_lhs, new_join_rhs)
-                    case Chain():
-                        new_union_lhs = self._insert_recursive(next_lhs, preferred_engine, lock)
-                        new_union_rhs = self._insert_recursive(next_rhs, preferred_engine, lock)
-                        if new_union_lhs is next_lhs and new_union_lhs is next_rhs:
-                            return target
-                        if new_union_lhs.columns != new_union_rhs.columns:
-                            new_projection = Projection(new_union_lhs.columns | new_union_rhs.columns)
-                            if new_projection.columns == self.columns:
-                                # This is the best we can do; each side only
-                                # projected away columns the other side kept.
-                                return target
-                            # Try again with a less-ambitious projection that
-                            # should work equally well on both sides.
-                            new_union_lhs = self._insert_recursive(next_lhs, preferred_engine, lock)
-                            new_union_rhs = self._insert_recursive(next_rhs, preferred_engine, lock)
-                        return operation.apply(new_union_lhs, new_union_rhs)
-        return target
+        return super()._finish_apply(target)
 
     def applied_columns(self, target: Relation) -> Set[ColumnTag]:
         # Docstring inherited.
@@ -266,3 +94,46 @@ class Projection(UnaryOperation):
     def applied_min_rows(self, target: Relation) -> int:
         # Docstring inherited.
         return target.min_rows
+
+    def commute(self, current: UnaryOperationRelation) -> UnaryCommutator:
+        # Docstring inherited.
+        from ._calculation import Calculation
+
+        match current.operation:
+            case Projection():
+                # We can just drop any existing Projection as this one
+                # supersedes it; by construction the new one has a
+                # subset of the original's columns.
+                return UnaryCommutator(first=self, second=Identity())
+            case Calculation(tag=tag) if tag not in self.columns:
+                # Projection will drop the column added by the
+                # Calculation, so it might as well have never
+                # existed.
+                return UnaryCommutator(first=self, second=Identity())
+            case _:
+                if not self.columns >= current.operation.columns_required:
+                    # Can't move the entire projection past this operation;
+                    # move what we can, and return the full Projection as the
+                    # "remainder".
+                    return UnaryCommutator(
+                        first=Projection(self.columns | current.operation.columns_required),
+                        second=current.operation,
+                        done=False,
+                        messages=(
+                            f"{current.operation} requires columns "
+                            f"{set(current.operation.columns_required - self.columns)}",
+                        ),
+                    )
+        return UnaryCommutator(self, current.operation)
+
+    def simplify(self, upstream: UnaryOperation) -> UnaryOperation | None:
+        # Docstring inherited.
+        from ._calculation import Calculation
+
+        # See similar checks in commute for explanations.
+        match upstream:
+            case Projection():
+                return self
+            case Calculation(tag=tag) if tag not in self.columns:
+                return self
+        return None

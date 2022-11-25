@@ -18,7 +18,11 @@ Operations on relations are represented by subclasses of `UnaryOperation` and `B
 The `LeafRelation` class handles relations that represent direct storage of rows (and in some cases actually do store rows themselves).
 The `Relation` interface provides factory methods for constructing and applying operations to relation that should be used instead of directly interacting with operation classes when possible.
 
-The three concrete `Relation` classes are frozen dataclasses, ensuring that they are immutable (with the exception of `Relation.payload`), equality comparable, hashable, and that have a useful (but in still lossy) `repr`.
+The fourth and final `Relation` class is `MarkerRelation`, which adds some information or context to a target relation without changing the relation's
+actual content.
+Unlike other relation types, `MarkerRelation` can be inherited from freely.
+
+Concrete `Relation` classes (including extensions) should be frozen dataclasses, ensuring that they are immutable (with the exception of `Relation.payload`), equality comparable, hashable, and that they have a useful (but in still lossy) `repr`.
 `Relation` classes also provide a `str` representation that is much more concise, for cases where seeing the overall tree is more important than the details of any particular relation.
 
 .. _lsst.daf.relation-overview-engines:
@@ -28,16 +32,18 @@ Engines
 
 Relations are associated with "engines": systems that may hold the actual data a relation (at least) conceptually represents and can perform operations on them to obtain the derived data.
 These are represented by `Engine` instances held by the relation objects themselves, and the `sql` and `iteration` subpackages provide at least partial implementations of engines for relations backed by SQL databases (via `SQLAlchemy`_) and native Python iterables, respectively.
+A relation tree can include multiple engines, by using a `Transfer` relation class to mark the boundaries between them.
+The `Processor` class can be used to execute multiple-engine trees.
 
 It is up to an engine how strictly its operations adhere to relational algebra operation definition.
 SQL is formally defined in terms of operations on "bags" or "multisets", whose rows are not unique and sometimes ordered, while formal relations are always unordered and unique.
 The `Relation` interface has more a more permissive view of uniqueness to facilitate interaction with SQL: a `Relation` *may* have non-unique rows, but any duplicates are not meaningful, and hence most operations may remove or propagate duplicates at their discretion, though engines may make stronger guarantees and most relations are not permitted to introduce duplication when applied to a base relation with unique rows.
-It is also up to engines to determine whether an operations maintains the order of rows; SQL engine operations generally do not, while the iteration engine's operations always do (see `Engine.preserves_order`).
+It is also up to engines to determine whether an operations maintains the order of rows; SQL engine operations often do not, while the iteration engine's operations always do.
 
-Certain relations can have an engine-specific `~Relation.payload` attribute that either holds the actual relation state for that engine or a reference to it.
-The `iteration` engine's payloads are instances of the `iteration.RowIterable` interface, while the SQL engine's payloads are `sql.SelectParts` instance, which can represent a SQLAlchemy table or subquery expression.
+`LeafRelation` and `MarkerRelation` objects can have an engine-specific `~Relation.payload` attribute that either holds the actual relation state for that engine or a reference to it.
+The `iteration` engine's payloads are instances of the `iteration.RowIterable` interface, while the SQL engine's payloads are `sql.Payload` instances, which can represent a SQLAlchemy table or subquery expression.
 `LeafRelation` objects always have a payload that is not `None`.
-`Materialization` operations indicate that a payload should be attached when the relation is first "executed" by an engine or the `Processor` class, allowing subsequent executions to reuse that payload and avoid repeating upstream execution.
+`Materialization` markers indicate that a payload should be attached when the relation is first "executed" by an engine or the `Processor` class, allowing subsequent executions to reuse that payload and avoid repeating upstream execution.
 Attaching a payload is the only way a relation can be modified after construction, and a payload that is not `None` can never be replaced.
 
 .. _lsst.daf.relation-overview-operations:
@@ -46,7 +52,7 @@ Operations
 ----------
 
 The full set of unary and binary operations provided is given below, along with the `Relation` factory methods that can be used to apply certain operations directly.
-Applying an operation to a relation always returns a new relation (unless the operation is a no-op, in which case the original may be returned unchanged), and always acts lazily: applying an operation is not the same as processing a relation tree that contains that operation.
+Applying an operation to a relation always returns a new relation (unless the operation is a no-op, in which case the original may be returned unchanged), and always acts lazily: applying an operation is not the same as processing or executing a relation tree that contains that operation.
 
 `Calculation` (`UnaryOperation`) / `Relation.with_calculated_column`
    Add a new column whose values are calculated from one or more existing columns, via by a `column expression <ColumnExpression>`.
@@ -63,10 +69,6 @@ Applying an operation to a relation always returns a new relation (unless the op
 `Join`  (`BinaryOperation`) / `Relation.join`
    Perform a natural join: combine two relations by matching rows with the same values in their common columns (and satisfying an optional column expression, via a `Predicate`), producing a new relation whose columns are the union of the columns of its operands.
    This is equivalent to [``INNER``] ``JOIN`` in SQL.
-`Marker` (`UnaryOperation`)
-   An intermediate abstract base class for unary operations that do not change the columns or rows at all, and exist only to provide extra information to a processing algorithm or engine.
-`Materialization` (`Marker`) / `Relation.materialized`
-   Indicate that the upstream tree should be evaluated only once, with the results saved and reused for subsequent processing.
 `Projection` (`UnaryOperation`) / `Relation.with_only_columns`
    Remove some columns from a relation.
 `Reordering` (`UnaryOperation`)
@@ -81,10 +83,6 @@ Applying an operation to a relation always returns a new relation (unless the op
    This is equivalent to ``OFFSET`` and ``LIMIT`` in SQL, or indexing with `slice` object or ``start:stop`` syntax in Python.
 `Sort` (`Reordering`) / `Relation.sorted`
    Sort rows according to a `column expression <ColumnExpression>`.
-`Transfer` (`Marker`) / `Relation.transferred_to`
-   Transfer the relation to a new engine.
-   Relation trees that contain a transfer generally cannot be handled by either engine alone.
-   The `Processor` class can be used to make it easer to write algorithms that process these trees.
 
 .. _lsst.daf.relation-overview-column_expressions:
 
@@ -162,13 +160,14 @@ This is a fragile multiple-dispatch problem.
 
 To simplify things, this package chooses to prohibit most kinds of `Relation` and operation extensibility:
 
-- custom `Relation`, `BinaryOperation`, and column expression subclasses are not permitted;
-- custom subclasses of `UnaryOperation` are restricted to subclasses of the more limited `RowFilter`, `Reordering`, and `Marker` intermediate interfaces.
+- custom `Relation` subclasses must be `MarkerRelation` subclasses;
+- custom `BinaryOperation` and column expression subclasses are not permitted;
+- custom subclasses of `UnaryOperation` are restricted to subclasses of the more limited `RowFilter` and `Reordering` intermediate interfaces.
 
 These prohibitions are enforced by ``__init_subclass__`` checks in the abstract base classes.
 
 .. note::
-   `Relation` is actually a `typing.Protocol`, not (just) an ABC, and the concrete `LeafRelation`, `UnaryOperationRelation`, and `BinaryOperationRelation` classes actually inherit from `BaseRelation` while satisfying the `Relation` interface only in a structural subtyping sense.
+   `Relation` is actually a `typing.Protocol`, not (just) an ABC, and the concrete `LeafRelation`, `UnaryOperationRelation`, `BinaryOperationRelation`, and `MarkerRelation` classes actually inherit from `BaseRelation` while satisfying the `Relation` interface only in a structural subtyping sense.
    This allows various `Relation` attribute interfaces (e.g. `Relation.engine`) to be implemented as either true properties or dataclass fields, and it should be invisible to users except in the rare case that they need to perform a runtime `isinstance` check with the `Relation` type itself, not just a specific concrete `Relation` subclass: in this case `BaseRelation` must be used instead of `Relation`.
 
 The standard approach to designs like this in object oriented programming is the Visitor Pattern, which in this case would involve a base class or suite of base classes for algorithms or engines with a method for each possible relation-tree node type (relations, operations, column expressions); these would be invoked by a method on each node interface whose concrete implementations call the corresponding algorithm or engine method.

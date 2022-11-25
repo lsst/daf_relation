@@ -25,11 +25,13 @@ __all__ = ("LeafRelation",)
 
 import dataclasses
 from collections.abc import Sequence, Set
-from typing import Any, Literal, final
+from typing import TYPE_CHECKING, Any, Literal, final
 
-from ._columns import ColumnTag
-from ._engine import Engine
 from ._relation import BaseRelation
+
+if TYPE_CHECKING:
+    from ._columns import ColumnTag
+    from ._engine import Engine
 
 
 @final
@@ -44,7 +46,7 @@ class LeafRelation(BaseRelation):
     (`Engine`).
     """
 
-    columns: Set[ColumnTag] = dataclasses.field(repr=False, compare=True)
+    columns: frozenset[ColumnTag] = dataclasses.field(repr=False, compare=True)
     """The columns in this relation (`~collections.abc.Set` [ `ColumnTag` ] ).
     """
 
@@ -110,10 +112,15 @@ class LeafRelation(BaseRelation):
             One or more messages explaining why the relation has no rows.
         name : `str`, optional
             Name used to identify and reconstruct this relation.
+
+        Returns
+        -------
+        relation : `LeafRelation`
+            Doomed leaf relation.
         """
         return LeafRelation(
             engine=engine,
-            columns=columns,
+            columns=frozenset(columns),
             min_rows=0,
             max_rows=0,
             payload=engine.get_doomed_payload(columns),
@@ -131,6 +138,11 @@ class LeafRelation(BaseRelation):
             The engine that is responsible for interpreting this relation.
         name : `str`, optional
             Name used to identify and reconstruct this relation.
+
+        Returns
+        -------
+        relation : `LeafRelation`
+            Leaf relation with no columns and one row.
         """
         return LeafRelation(
             engine=engine,

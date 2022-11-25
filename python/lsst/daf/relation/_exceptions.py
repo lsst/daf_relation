@@ -25,7 +25,6 @@ __all__ = (
     "EngineError",
     "ColumnError",
     "RelationalAlgebraError",
-    "RowOrderError",
 )
 
 
@@ -44,10 +43,4 @@ class EngineError(RelationalAlgebraError):
 class ColumnError(RelationalAlgebraError):
     """Exception type raised to indicate problems in a relation's columns
     and/or unique keys.
-    """
-
-
-class RowOrderError(RelationalAlgebraError):
-    """Exception type raised to indicate problems in the definition of a
-    tree with respect to whether rows are ordered.
     """

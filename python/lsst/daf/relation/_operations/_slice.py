@@ -29,9 +29,10 @@ from typing import TYPE_CHECKING, Literal, final
 
 from .._columns import ColumnTag
 from .._operation_relations import UnaryOperationRelation
-from .._unary_operation import RowFilter
+from .._unary_operation import Identity, RowFilter, UnaryCommutator, UnaryOperation
 
 if TYPE_CHECKING:
+    from .._engine import Engine
     from .._relation import Relation
 
 
@@ -50,6 +51,12 @@ class Slice(RowFilter):
     """One past the last index to include in the output relation
     (`int` or `None`).
     """
+
+    def __post_init__(self) -> None:
+        if self.start < 0:
+            raise ValueError(f"Slice start {self.start} is negative.")
+        if self.stop is not None and self.stop < self.start:
+            raise ValueError(f"Slice stop {self.stop} is less than its start {self.start}.")
 
     @property
     def limit(self) -> int | None:
@@ -79,51 +86,92 @@ class Slice(RowFilter):
     def __str__(self) -> str:
         return f"slice[{self.start}:{self.stop}]"
 
-    def apply(self, target: Relation, lock: bool = False) -> Relation:
-        """Return a new relation that applies this slice to an existing
-        relation.
+    def _begin_apply(
+        self, target: Relation, preferred_engine: Engine | None
+    ) -> tuple[UnaryOperation, Engine]:
+        # Docstring inherited.
+        if not self.start and self.stop is None:
+            return Identity(), target.engine
+        return super()._begin_apply(target, preferred_engine)
 
-        Relation indexing with a `slice` object constructs and applies a
-        `Slice` object, and should be preferred to calling this method
-        directly.
+    def _finish_apply(self, target: Relation) -> Relation:
+        # Docstring inherited.
+        if not self.start and self.stop is None:
+            return target
+        return super()._finish_apply(target)
+
+    def then(self, next: Slice) -> Slice:
+        """Compose this slice with another one.
 
         Parameters
         ----------
-        target : `Relation`
-            Relation this operation will act upon.
-        lock : `bool`, optional
-            Set `~Relation.is_locked` on the returned relation to this value.
+        next : `Slice`
+            Slice that acts after ``self``.
 
         Returns
         -------
-        relation : `Relation`
-            New relation with only the rows between `start` and `stop`.  May be
-            ``target`` if ``start=0`` and ``stop=None``.  If ``target`` is
-            already a slice operation relation, the operations will be merged.
+        composition : `Slice`
+            Slice that is equivalent to ``self`` and ``next`` being applied
+            back-to-back.
         """
-        if not self.start and self.stop is None:
-            return target
-        match target:
-            case UnaryOperationRelation(
-                operation=Slice(start=previous_start, stop=previous_stop), target=nested_target
-            ):
-                new_start = previous_start + self.start
-                if previous_stop is None:
-                    if self.stop is None:
-                        new_stop = None
-                    else:
-                        new_stop = self.stop + previous_start
-                else:
-                    if self.stop is None:
-                        new_stop = previous_stop
-                    else:
-                        new_stop = min(previous_stop, self.stop + previous_start)
-                return Slice(new_start, new_stop).apply(nested_target, lock=lock)
-        return super().apply(target, lock=lock)
+        new_start = self.start + next.start
+        if self.stop is None:
+            if next.stop is None:
+                new_stop = None
+            else:
+                new_stop = next.stop + self.start
+        else:
+            if next.stop is None:
+                new_stop = self.stop
+            else:
+                new_stop = min(self.stop, next.stop + self.start)
+        return Slice(new_start, new_stop)
 
     def applied_min_rows(self, target: Relation) -> int:
         # Docstring inherited.
         if self.stop is not None:
-            return min(self.stop - self.start, target.min_rows)
+            stop = min(self.stop, target.min_rows)
         else:
-            return target.min_rows
+            stop = target.min_rows
+        return max(stop - self.start, 0)
+
+    def applied_max_rows(self, target: Relation) -> int | None:
+        # Docstring inherited.
+        if self.stop is not None:
+            if target.max_rows is not None:
+                stop = min(self.stop, target.max_rows)
+            else:
+                stop = self.stop
+        else:
+            if target.max_rows is not None:
+                stop = target.max_rows
+            else:
+                return None
+        return max(stop - self.start, 0)
+
+    def commute(self, current: UnaryOperationRelation) -> UnaryCommutator:
+        # Docstring inherited.
+        from ._calculation import Calculation
+        from ._projection import Projection
+
+        match current.operation:
+            case Projection() | Calculation():
+                return UnaryCommutator(first=self, second=current.operation)
+            case _:
+                return UnaryCommutator(
+                    first=None,
+                    second=current.operation,
+                    done=False,
+                    messages=(
+                        f"Slice only commutes with Projection and Calculation, not {current.operation}",
+                    ),
+                )
+
+    def simplify(self, upstream: UnaryOperation) -> UnaryOperation | None:
+        # Docstring inherited.
+        if not self.start and self.stop is None:
+            return upstream
+        match upstream:
+            case Slice():
+                return upstream.then(self)
+        return None

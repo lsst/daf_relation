@@ -27,6 +27,7 @@ import dataclasses
 from collections.abc import Callable
 
 from ._leaf_relation import LeafRelation
+from ._marker_relation import MarkerRelation
 from ._operation_relations import BinaryOperationRelation, UnaryOperationRelation
 from ._operations import Chain, Join, Selection, Slice
 from ._relation import Relation
@@ -93,6 +94,8 @@ class Diagnostics:
                     return cls(True, messages)
                 else:
                     return cls(False, messages)
+            case MarkerRelation(target=target):
+                return cls.run(target, executor)
             case UnaryOperationRelation(operation=operation, target=target):
                 if (result := cls.run(target, executor)).is_doomed:
                     return result
@@ -124,7 +127,7 @@ class Diagnostics:
                 rhs_result = cls.run(rhs, executor)
                 messages = lhs_result.messages + rhs_result.messages
                 if relation.max_rows == 0 and operation.applied_max_rows(lhs, rhs) != 0:
-                    messages.append(f"Binary operation relation {relation} has no rows (static).")
+                    messages.append(f"Binary operation relation '{relation}' has no rows (static).")
                     return cls(True, messages)
                 match operation:
                     case Chain():
@@ -133,10 +136,12 @@ class Diagnostics:
                         if lhs_result.is_doomed or rhs_result.is_doomed:
                             return cls(True, messages)
                         if predicate.as_trivial() is False:
-                            messages.append(f"Join predicate '{predicate}' is trivially false in {relation}.")
+                            messages.append(
+                                f"Join predicate '{predicate}' is trivially false in '{relation}'."
+                            )
                             return cls(True, messages)
                 if executor is not None and not executor(relation):
-                    messages.append(f"Operation {operation} yields no results when executed: {relation!s}")
+                    messages.append(f"Operation {operation} yields no results when executed: '{relation!s}'")
                     return cls(True, messages)
                 return cls(False, messages)
         raise AssertionError("match should be exhaustive and all branches should return")
