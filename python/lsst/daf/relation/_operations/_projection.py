@@ -99,32 +99,35 @@ class Projection(UnaryOperation):
         # Docstring inherited.
         from ._calculation import Calculation
 
+        commuted_columns: frozenset[ColumnTag] = self.columns
         match current.operation:
             case Projection():
                 # We can just drop any existing Projection as this one
                 # supersedes it; by construction the new one has a
                 # subset of the original's columns.
                 return UnaryCommutator(first=self, second=Identity())
-            case Calculation(tag=tag) if tag not in self.columns:
-                # Projection will drop the column added by the
-                # Calculation, so it might as well have never
-                # existed.
-                return UnaryCommutator(first=self, second=Identity())
-            case _:
-                if not self.columns >= current.operation.columns_required:
-                    # Can't move the entire projection past this operation;
-                    # move what we can, and return the full Projection as the
-                    # "remainder".
-                    return UnaryCommutator(
-                        first=Projection(self.columns | current.operation.columns_required),
-                        second=current.operation,
-                        done=False,
-                        messages=(
-                            f"{current.operation} requires columns "
-                            f"{set(current.operation.columns_required - self.columns)}",
-                        ),
-                    )
-        return UnaryCommutator(self, current.operation)
+            case Calculation(tag=tag):
+                if tag not in self.columns:
+                    # Projection will drop the column added by the
+                    # Calculation, so it might as well have never
+                    # existed.
+                    return UnaryCommutator(first=self, second=Identity())
+                else:
+                    commuted_columns -= {tag}
+        if not commuted_columns >= current.operation.columns_required:
+            # Can't move the entire projection past this operation;
+            # move what we can, and return the full Projection as the
+            # "remainder".
+            return UnaryCommutator(
+                first=Projection(commuted_columns | current.operation.columns_required),
+                second=current.operation,
+                done=False,
+                messages=(
+                    f"{current.operation} requires columns "
+                    f"{set(current.operation.columns_required - self.columns)}",
+                ),
+            )
+        return UnaryCommutator(Projection(commuted_columns), current.operation)
 
     def simplify(self, upstream: UnaryOperation) -> UnaryOperation | None:
         # Docstring inherited.
