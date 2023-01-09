@@ -587,6 +587,25 @@ class SqlEngineTestCase(tests.RelationTestCase):
             "(SELECT leaf2.a AS a, leaf2.b AS b FROM leaf2 LIMIT 2 OFFSET 1) AS anon_1",
             engine.to_executable(leaf1.chain(leaf2[1:3])),
         )
+        # Add a Selection or Calculation on top of a Chain yields subqueries
+        # to avoid reordering operations.
+        expression = ColumnExpression.reference(b).method("__neg__")
+        self.check_sql_str(
+            "SELECT anon_1.a AS a, anon_1.b AS b, -anon_1.b AS c FROM "
+            "(SELECT leaf1.a AS a, leaf1.b AS b FROM leaf1 "
+            "UNION ALL "
+            "SELECT leaf2.a AS a, leaf2.b AS b FROM leaf2) AS anon_1",
+            engine.to_executable(leaf1.chain(leaf2).with_calculated_column(tests.ColumnTag("c"), expression)),
+        )
+        predicate = ColumnExpression.reference(a).gt(ColumnExpression.literal(0))
+        self.check_sql_str(
+            "SELECT anon_1.a AS a, anon_1.b AS b FROM "
+            "(SELECT leaf1.a AS a, leaf1.b AS b FROM leaf1 "
+            "UNION ALL "
+            "SELECT leaf2.a AS a, leaf2.b AS b FROM leaf2) AS anon_1 "
+            "WHERE anon_1.a > 0",
+            engine.to_executable(leaf1.chain(leaf2).with_rows_satisfying(predicate)),
+        )
 
     def test_row_ordering_loss(self) -> None:
         """Test that we raise when we would have to make an existing Sort do
