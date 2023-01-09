@@ -28,7 +28,8 @@ from typing import Any
 
 from .._exceptions import EngineError
 from .._marker_relation import MarkerRelation
-from .._operations import Deduplication, Projection, Slice, Sort
+from .._operation_relations import BinaryOperationRelation
+from .._operations import Chain, Deduplication, Projection, Slice, Sort
 from .._relation import Relation
 from .._unary_operation import UnaryOperation
 
@@ -121,6 +122,12 @@ class Select(MarkerRelation):
     operations is holds.
     """
 
+    is_compound: bool
+    """Whether this `Select` represents a SQL ``UNION`` or ``UNION ALL``.
+
+    This is `True` if and only if `skip_to` is a `.Chain` operation relation.
+    """
+
     def __str__(self) -> str:
         return f"select({self.target})"
 
@@ -211,6 +218,10 @@ class Select(MarkerRelation):
             target = deduplication._finish_apply(target)
         if slice.start or slice.limit is not None:
             target = slice._finish_apply(target)
+        is_compound = False
+        match skip_to:
+            case BinaryOperationRelation(operation=Chain()):
+                is_compound = True
         return cls(
             target=target,
             projection=projection,
@@ -218,6 +229,7 @@ class Select(MarkerRelation):
             sort=sort,
             slice=slice,
             skip_to=skip_to,
+            is_compound=is_compound,
         )
 
     def reapply_skip(

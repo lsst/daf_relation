@@ -226,7 +226,13 @@ class Engine(
         """
         match operation:
             case Calculation(tag=tag):
-                if select.has_projection:
+                if select.is_compound:
+                    # This Select wraps a Chain operation in order to represent
+                    # a SQL UNION or UNION ALL, and we trust the user's intent
+                    # in putting those upstream of this operation, so we also
+                    # add a nested subquery here.
+                    return Select.apply_skip(operation._finish_apply(select))
+                elif select.has_projection:
                     return select.reapply_skip(
                         after=operation,
                         projection=Projection(frozenset(select.columns | {tag})),
@@ -285,6 +291,12 @@ class Engine(
                     # before this Selection via a nested subquery (which means
                     # we just apply the Selection to target, then add a new
                     # empty subquery marker).
+                    return Select.apply_skip(operation._finish_apply(select))
+                elif select.is_compound:
+                    # This Select wraps a Chain operation in order to represent
+                    # a SQL UNION or UNION ALL, and we trust the user's intent
+                    # in putting those upstream of this operation, so we also
+                    # add a nested subquery here.
                     return Select.apply_skip(operation._finish_apply(select))
                 else:
                     return select.reapply_skip(after=operation)
