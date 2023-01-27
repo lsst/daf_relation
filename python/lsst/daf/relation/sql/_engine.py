@@ -79,7 +79,7 @@ _L = TypeVar("_L")
 
 @dataclasses.dataclass(repr=False, eq=False, kw_only=True)
 class Engine(
-    GenericConcreteEngine[Callable[..., sqlalchemy.sql.ColumnElement]],
+    GenericConcreteEngine[Callable[..., sqlalchemy.sql.ColumnElement[Any]]],
     Generic[_L],
 ):
     """A concrete engine class for relations backed by a SQL database.
