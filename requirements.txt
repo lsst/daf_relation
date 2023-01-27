@@ -1,2 +1,2 @@
 lsst-utils
-sqlalchemy >= 1.3
+sqlalchemy >= 1.4

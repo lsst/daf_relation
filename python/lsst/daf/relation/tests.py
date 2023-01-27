@@ -34,7 +34,8 @@ try:
     from sqlalchemy.dialects.sqlite.pysqlite import dialect as sql_dialect
 except ImportError:
 
-    def sql_dialect() -> Any:
+    # MyPy doesn't like this trick.
+    def sql_dialect() -> Any:  # type: ignore
         raise unittest.SkipTest("sqlalchemy SQLite dialect not available")
 
 

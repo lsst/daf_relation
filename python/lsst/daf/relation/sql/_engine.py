@@ -79,7 +79,7 @@ _L = TypeVar("_L")
 
 @dataclasses.dataclass(repr=False, eq=False, kw_only=True)
 class Engine(
-    GenericConcreteEngine[Callable[..., sqlalchemy.sql.ColumnElement]],
+    GenericConcreteEngine[Callable[..., sqlalchemy.sql.ColumnElement[Any]]],
     Generic[_L],
 ):
     """A concrete engine class for relations backed by a SQL database.
@@ -192,7 +192,9 @@ class Engine(
 
     def get_doomed_payload(self, columns: Set[ColumnTag]) -> Payload[_L]:
         # Docstring inherited.
-        select_columns = [sqlalchemy.sql.literal(None).label(tag.qualified_name) for tag in columns]
+        select_columns: list[sqlalchemy.sql.ColumnElement] = [
+            sqlalchemy.sql.literal(None).label(tag.qualified_name) for tag in columns
+        ]
         self.handle_empty_columns(select_columns)
         subquery = sqlalchemy.sql.select(*select_columns).subquery()
         return Payload(
@@ -443,7 +445,7 @@ class Engine(
 
         This method must be overridden to support a custom logical columns.
         """
-        select_columns = [
+        select_columns: list[sqlalchemy.sql.ColumnElement] = [
             cast(sqlalchemy.sql.ColumnElement, logical_column).label(tag.qualified_name)
             for tag, logical_column in items
         ]
@@ -532,6 +534,7 @@ class Engine(
         `to_payload` for all other relation types.
         """
         columns_available: Mapping[ColumnTag, _L] | None = None
+        executable: sqlalchemy.sql.Select | sqlalchemy.sql.CompoundSelect
         match select.skip_to:
             case BinaryOperationRelation(operation=Chain(), lhs=lhs, rhs=rhs):
                 lhs_executable = self._select_to_executable(cast(Select, lhs), extra_columns)
@@ -614,7 +617,10 @@ class Engine(
                 on_terms: list[sqlalchemy.sql.ColumnElement] = []
                 if common_columns:
                     on_terms.extend(
-                        lhs_payload.columns_available[tag] == rhs_payload.columns_available[tag]
+                        cast(
+                            sqlalchemy.sql.ColumnElement,
+                            lhs_payload.columns_available[tag] == rhs_payload.columns_available[tag],
+                        )
                         for tag in common_columns
                     )
                 columns_available = {**lhs_payload.columns_available, **rhs_payload.columns_available}
@@ -678,7 +684,7 @@ class Engine(
             case ColumnFunction(name=name, args=args):
                 sql_args = [self.convert_column_expression(arg, columns_available) for arg in args]
                 if (function := self.get_function(name)) is not None:
-                    return function(*sql_args)
+                    return cast(_L, function(*sql_args))
                 return getattr(sql_args[0], name)(*sql_args[1:])
         raise AssertionError(
             f"matches should be exhaustive and all branches should return; got {expression!r}."
@@ -705,7 +711,7 @@ class Engine(
         --------
         :ref:`lsst.daf.relation-sql-logical-columns`
         """
-        return sqlalchemy.sql.literal(value)
+        return cast(_L, sqlalchemy.sql.literal(value))
 
     def expect_column_scalar(self, logical_column: _L) -> sqlalchemy.sql.ColumnElement:
         """Convert a logical column value to a SQLAlchemy expression.
