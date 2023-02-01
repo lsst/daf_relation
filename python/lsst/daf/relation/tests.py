@@ -33,7 +33,6 @@ from typing import Any
 try:
     from sqlalchemy.dialects.sqlite.pysqlite import dialect as sql_dialect
 except ImportError:
-
     # MyPy doesn't like this trick.
     def sql_dialect() -> Any:  # type: ignore
         raise unittest.SkipTest("sqlalchemy SQLite dialect not available")
