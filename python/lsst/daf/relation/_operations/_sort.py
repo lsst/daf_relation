@@ -43,7 +43,6 @@ if TYPE_CHECKING:
 
 @dataclasses.dataclass
 class SortTerm:
-
     expression: ColumnExpression
     ascending: bool = True
 

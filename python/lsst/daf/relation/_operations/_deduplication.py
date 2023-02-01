@@ -66,7 +66,7 @@ class Deduplication(UnaryOperation):
                 second=current.operation,
                 done=False,
                 messages=(
-                    f"deduplication columns would change from "
+                    "deduplication columns would change from "
                     f"{set(current.columns)} to {set(current.target.columns)}",
                 ),
             )
