@@ -689,10 +689,7 @@ class BaseRelation:
                 "MarkerRelation",
             }
             or cls.__base__.__name__ != "Relation"
-        ), (
-            "Relation inheritance is closed to predefined types "
-            "in daf_relation and MarkerRelation subclasses."
-        )
+        ), "Relation inheritance is closed to predefined types in daf_relation and MarkerRelation subclasses."
 
     @property
     @_copy_relation_docs
