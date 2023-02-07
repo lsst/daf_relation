@@ -51,6 +51,7 @@ from .._columns import (
 from .._engine import GenericConcreteEngine
 from .._exceptions import EngineError, RelationalAlgebraError
 from .._leaf_relation import LeafRelation
+from .._marker_relation import MarkerRelation
 from .._materialization import Materialization
 from .._operation_relations import BinaryOperationRelation, UnaryOperationRelation
 from .._operations import (
@@ -153,10 +154,10 @@ class Engine(
                 # We always conform upstream of transfers and materializations,
                 # so no need to recurse.
                 return Select.apply_skip(relation)
-            case _:
+            case MarkerRelation(target=target):
                 # Other marker relations.
                 conformed_target = self.conform(target)
-                return Select.apply_skip(relation)
+                return Select.apply_skip(conformed_target)
         raise AssertionError("Match should be exhaustive and all branches return.")
 
     def materialize(
