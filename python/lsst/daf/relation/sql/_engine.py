@@ -51,6 +51,7 @@ from .._columns import (
 from .._engine import GenericConcreteEngine
 from .._exceptions import EngineError, RelationalAlgebraError
 from .._leaf_relation import LeafRelation
+from .._marker_relation import MarkerRelation
 from .._materialization import Materialization
 from .._operation_relations import BinaryOperationRelation, UnaryOperationRelation
 from .._operations import (
@@ -153,10 +154,10 @@ class Engine(
                 # We always conform upstream of transfers and materializations,
                 # so no need to recurse.
                 return Select.apply_skip(relation)
-            case _:
+            case MarkerRelation(target=target):
                 # Other marker relations.
                 conformed_target = self.conform(target)
-                return Select.apply_skip(relation)
+                return Select.apply_skip(conformed_target)
         raise AssertionError("Match should be exhaustive and all branches return.")
 
     def materialize(
@@ -193,7 +194,7 @@ class Engine(
     def get_doomed_payload(self, columns: Set[ColumnTag]) -> Payload[_L]:
         # Docstring inherited.
         select_columns: list[sqlalchemy.sql.ColumnElement] = [
-            sqlalchemy.sql.literal(None).label(tag.qualified_name) for tag in columns
+            sqlalchemy.sql.literal(None).label(self.get_identifier(tag)) for tag in columns
         ]
         self.handle_empty_columns(select_columns)
         subquery = sqlalchemy.sql.select(*select_columns).subquery()
@@ -386,6 +387,30 @@ class Engine(
                     return lhs
         raise AssertionError(f"Match on {operation} should be exhaustive and all branches return..")
 
+    def get_identifier(self, tag: ColumnTag) -> str:
+        """Return the SQL identifier that should be used to represent the given
+        column.
+
+        Parameters
+        ----------
+        tag : `.ColumnTag`
+            Object representing a column.
+
+        Returns
+        -------
+        identifier : `str`
+            SQL identifier for this column.
+
+        Notes
+        -----
+        This method may be overridden to replace special characters not
+        supported by a particular DBMS (even after quoting, which SQLAlchemy
+        handles transparently), deal with case transformation, or ensure
+        identifiers are not truncated (e.g. by PostgreSQL's 64-char limit).
+        The default implementation returns ``tag.qualified_name`` unchanged.
+        """
+        return tag.qualified_name
+
     def extract_mapping(
         self, tags: Iterable[ColumnTag], sql_columns: sqlalchemy.sql.ColumnCollection
     ) -> dict[ColumnTag, _L]:
@@ -410,7 +435,7 @@ class Engine(
         -----
         This method must be overridden to support a custom logical columns.
         """
-        return {tag: cast(_L, sql_columns[tag.qualified_name]) for tag in tags}
+        return {tag: cast(_L, sql_columns[self.get_identifier(tag)]) for tag in tags}
 
     def select_items(
         self,
@@ -446,7 +471,7 @@ class Engine(
         This method must be overridden to support a custom logical columns.
         """
         select_columns: list[sqlalchemy.sql.ColumnElement] = [
-            cast(sqlalchemy.sql.ColumnElement, logical_column).label(tag.qualified_name)
+            cast(sqlalchemy.sql.ColumnElement, logical_column).label(self.get_identifier(tag))
             for tag, logical_column in items
         ]
         select_columns.extend(extra)
