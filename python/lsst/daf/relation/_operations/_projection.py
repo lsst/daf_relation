@@ -68,7 +68,7 @@ class Projection(UnaryOperation):
         return True
 
     def __str__(self) -> str:
-        return f"Π[{', '.join(str(tag) for tag in self.columns)}]"
+        return f"Π[{', '.join(sorted(str(tag) for tag in self.columns))}]"
 
     def _begin_apply(
         self, target: Relation, preferred_engine: Engine | None
