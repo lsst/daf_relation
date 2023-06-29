@@ -74,6 +74,8 @@ def _make_leaf(
 
 
 class SqlEngineTestCase(tests.RelationTestCase):
+    """Test the SQL engine."""
+
     def setUp(self):
         self.maxDiff = None
 

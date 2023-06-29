@@ -35,6 +35,7 @@ try:
 except ImportError:
     # MyPy doesn't like this trick.
     def sql_dialect() -> Any:  # type: ignore
+        """Mock sql dialect."""
         raise unittest.SkipTest("sqlalchemy SQLite dialect not available")
 
 

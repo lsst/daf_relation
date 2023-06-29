@@ -41,6 +41,8 @@ from lsst.daf.relation import (
 
 
 class ColumnExpressionTestCase(tests.RelationTestCase):
+    """Test column expressions."""
+
     def test_operator_function(self) -> None:
         """Test ColumnFunction via its constructor and a name found in the
         `operator` module.
