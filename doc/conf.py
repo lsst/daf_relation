@@ -11,3 +11,7 @@ html_title = project
 html_short_title = project
 doxylink = {}
 exclude_patterns = ["changes/*"]
+
+nitpick_ignore_regex = [
+    ("py:obj", r"sqlalchemy\..*"),
+]

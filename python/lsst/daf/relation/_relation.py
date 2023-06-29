@@ -150,11 +150,11 @@ class Relation(Protocol):
 
     @abstractmethod
     def attach_payload(self, payload: Any) -> None:
-        """Attach an engine-specific `payload` to this relation.
+        """Attach an engine-specific ``payload`` to this relation.
 
         This method may be called exactly once on a `Relation` instance that
-        was not initialized with a `payload`, despite the fact that `Relation`
-        objects are otherwise considered immutable.
+        was not initialized with a ``payload``, despite the fact that
+        `Relation` objects are otherwise considered immutable.
 
         Parameters
         ----------
@@ -248,7 +248,7 @@ class Relation(Protocol):
         -------
         relation : `Relation`
             New relation with all rows from both relations.  If the engine
-            `preserves order <Engine.preserves_chain_order>` for chains, all
+            preserves order for chains, all
             rows from ``self`` will appear before all rows from ``rhs``, in
             their original order.  This method never returns an operand
             directly, even if the other has ``max_rows==0``, as it is assumed
@@ -261,9 +261,6 @@ class Relation(Protocol):
             Raised if the two relations do not have the same columns.
         EngineError
             Raised if the two relations do not have the same engine.
-        RowOrderError
-            Raised if ``self`` or ``rhs`` is unnecessarily ordered; see
-            `expect_unordered`.
         """
         raise NotImplementedError()
 
@@ -367,9 +364,6 @@ class Relation(Protocol):
             Raised if it was impossible to insert this operation in
             ``rhs.engine`` via backtracks or transfers on ``self``, or if the
             predicate was not supported by the engine.
-        RowOrderError
-            Raised if ``self`` or ``rhs`` is unnecessarily ordered; see
-            `expect_unordered`.
 
         Notes
         -----
@@ -670,7 +664,7 @@ class BaseRelation:
     This class provides method implementations for much of the `Relation`
     interface and is actually inherited from (unlike `Relation` itself) by all
     concrete relations.  It should only be used outside of the
-    `lsst.daf.relation` package when needed for `isinstance` checks.
+    ``lsst.daf.relation`` package when needed for `isinstance` checks.
     """
 
     def __init_subclass__(cls) -> None:

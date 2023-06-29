@@ -50,7 +50,7 @@ class ColumnContainer(ABC):
     `ColumnContainer` inheritance is closed to the types already provided by
     this package.  These concrete types can all be constructed via factory
     methods on `ColumnContainer` itself, so the derived types themselves only
-    need to be referenced when writing `match` expressions that process an
+    need to be referenced when writing ``match`` expressions that process an
     expression tree.  See :ref:`lsst.daf.relation-overview-extensibility` for
     rationale and details.
     """

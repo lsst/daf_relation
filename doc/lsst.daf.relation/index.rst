@@ -62,7 +62,7 @@ Applying an operation to a relation always returns a new relation (unless the op
 `Deduplication` (`UnaryOperation`) / `Relation.without_duplicates`
    Remove duplicate rows.
    This is equivalent to ``SELECT DISTINCT`` in SQL or filtering through `set` or `dict` in Python.
-`Identity` (`Marker`)
+`Identity` (`MarkerRelation`)
    Do nothing.
    This operation never actually appears in `Relation` trees; `Identity.apply`
    always returns the operand relation passed to it.
@@ -93,7 +93,7 @@ Many relation operations involve column expressions, such as the boolean filter 
 These are represented by the `ColumnExpression` (for general scalar-valued expressions), `Predicate` (for boolean expressions), and `ColumnContainer`  (for expressions that hold multiple values) abstract base classes.
 These base classes provide factory methods for all derived classes, making it generally unnecessary to refer to those types directly (except when writing an algorithm or engine that processes a relation tree; see :ref:`lsst.daf.relation-overview-extensibility`).
 Column expression objects can in general support multiple engines; some types are required to be supported by all engines, while others can hold a list of engine types that support them.
-The concrete column expression classes provided by `lsst.daf.relation` are given below, with their factory methods:
+The concrete column expression classes provided by ``lsst.daf.relation`` are given below, with their factory methods:
 
 `ColumnLiteral` / `ColumnExpression.literal`
    A constant scalar, non-boolean Python value.
@@ -174,10 +174,10 @@ The standard approach to designs like this in object oriented programming is the
 This implicitly restricts the set of node tree types to those with methods in the algorithm/engine base class.
 
 In languages with functional programming aspects, a much more direct approach involving enumerated types and pattern-matching syntax is often possible.
-With the introduction of the `match` statement in Python 3.10, this now includes Python, and this is the approach taken in here.
-This results in much more readable and concise code than the boilerplate-heavy visitor-pattern alternative, but it comes with a significant drawback: there are no checks (either at runtime or via static type checkers like MyPy) that all necessary `case` branches of a `match` are present.
+With the introduction of the ``match`` statement in Python 3.10, this now includes Python, and this is the approach taken in here.
+This results in much more readable and concise code than the boilerplate-heavy visitor-pattern alternative, but it comes with a significant drawback: there are no checks (either at runtime or via static type checkers like MyPy) that all necessary ``case`` branches of a ``match`` are present.
 This is in part by design - many algorithms on relation trees can act generically on most operation types, and hence need to only explicitly match one or two - but it requires considerable discipline from algorithm and engine authors to ensure that match logic is correct and well-tested.
-Another (smaller) drawback is that it can occasionally yield code that in other contexts might be considered antipatterns (e.g. `isinstance` is often a good alternative to a single-branch `match`).
+Another (smaller) drawback is that it can occasionally yield code that in other contexts might be considered antipatterns (e.g. `isinstance` is often a good alternative to a single-branch ``match``).
 
 .. _relational algebra: https://en.wikipedia.org/wiki/Relational_algebra
 .. _SQLAlchemy: https://www.sqlalchemy.org/

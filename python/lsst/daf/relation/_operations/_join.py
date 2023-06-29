@@ -221,9 +221,6 @@ class Join(BinaryOperation):
         ColumnError
             Raised if the given predicate requires columns not present in
             ``lhs`` or ``rhs``.
-        RowOrderError
-            Raised if ``lhs`` or ``rhs`` is unnecessarily ordered; see
-            `Relation.expect_unordered`.
 
         Notes
         -----

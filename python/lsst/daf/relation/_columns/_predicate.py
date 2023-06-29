@@ -53,7 +53,7 @@ class Predicate(ABC):
     `~PredicateFunction.name` value.  These concrete types can all be
     constructed via factory methods on `Predicate` itself, `ColumnExpression`,
     or `ColumnContainer`, so the derived types themselves only need to be
-    referenced when writing `match` expressions that process an expression
+    referenced when writing ``match`` expressions that process an expression
     tree.  See :ref:`lsst.daf.relation-overview-extensibility` for rationale
     and details.
     """

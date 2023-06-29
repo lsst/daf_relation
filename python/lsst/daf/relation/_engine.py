@@ -225,7 +225,7 @@ class Engine(Hashable):
         ----------
         columns : `~collections.abc.Set` [ `ColumnTag` ]
             The columns in this relation.
-        messages : `~collections.abc.Sequence [ `str` ]
+        messages : `~collections.abc.Sequence` [ `str` ]
             One or more messages explaining why the relation has no rows.
         name : `str`, optional
             Name used to identify and reconstruct this relation.
