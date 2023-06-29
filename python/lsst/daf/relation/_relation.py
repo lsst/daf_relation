@@ -664,7 +664,7 @@ def _copy_relation_docs(method: _M) -> _M:
     also want those docs to appear in the concrete derived classes, and that
     means we need to put them on the `BaseRelation` class so they can be
     inherited.
-    """
+    """  # noqa: D401
     method.__doc__ = getattr(Relation, method.__name__).__doc__
     return method
 

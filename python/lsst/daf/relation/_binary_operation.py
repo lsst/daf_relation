@@ -119,7 +119,7 @@ class BinaryOperation(ABC):
         This method provides an opportunity for operations to establish any
         invariants that must be satisfied only when the operation is part of
         a relation.
-        """
+        """  # noqa: D401
         return self
 
     def _finish_apply(self, lhs: Relation, rhs: Relation) -> Relation:
@@ -142,7 +142,7 @@ class BinaryOperation(ABC):
         This method provides an opportunity for operations to change the kind
         of relation produced (the default implementation constructs a
         `BinaryOperationRelation`).
-        """
+        """  # noqa: D401
         from ._operation_relations import BinaryOperationRelation
 
         return BinaryOperationRelation(

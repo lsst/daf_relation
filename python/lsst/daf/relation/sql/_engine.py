@@ -226,7 +226,7 @@ class Engine(
         -------
         appended : `Select`
             Conformed relation tree that includes the given operation.
-        """
+        """  # noqa: D401
         match operation:
             case Calculation(tag=tag):
                 if select.is_compound:
@@ -347,7 +347,7 @@ class Engine(
         -------
         appended : `Select`
             Conformed relation tree that includes the given operation.
-        """
+        """  # noqa: D401
         if lhs.has_sort and not lhs.has_slice:
             raise RelationalAlgebraError(
                 f"Applying binary operation {operation} to relation {lhs} will not preserve row order."
@@ -557,7 +557,7 @@ class Engine(
         relation types managed by `Select`, and `Chain` operations nested
         directly as the `skip_to` target of a `Select`.  It delegates to
         `to_payload` for all other relation types.
-        """
+        """  # noqa: D401
         columns_available: Mapping[ColumnTag, _L] | None = None
         executable: sqlalchemy.sql.Select | sqlalchemy.sql.CompoundSelect
         match select.skip_to:
@@ -614,7 +614,7 @@ class Engine(
         payload : `Payload`
             Struct containing a SQLAlchemy represenation of a simple ``SELECT``
             query.
-        """
+        """  # noqa: D401
         assert relation.engine == self, "Should be guaranteed by callers."
         if relation.payload is not None:  # Should cover all LeafRelations
             return relation.payload
