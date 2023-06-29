@@ -43,6 +43,8 @@ if TYPE_CHECKING:
 
 @dataclasses.dataclass
 class SortTerm:
+    """Sort expression and indication of sort direction."""
+
     expression: ColumnExpression
     ascending: bool = True
 
