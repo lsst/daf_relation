@@ -101,8 +101,8 @@ class BinaryOperation(ABC):
     def _begin_apply(self, lhs: Relation, rhs: Relation) -> BinaryOperation:
         """A customization hook for the beginning of operation application.
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         lhs : `Relation`
             One relation the operation should act on.
         rhs : `Relation`

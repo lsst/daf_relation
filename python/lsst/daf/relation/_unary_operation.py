@@ -245,8 +245,8 @@ class UnaryOperation(ABC):
     ) -> tuple[UnaryOperation, Engine]:
         """A customization hook for the beginning of operation application.
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         target : `Relation`
             Relation the operation should act on, at least conceptually.  Later
             logic may actually apply the operation upstream of this relation,
