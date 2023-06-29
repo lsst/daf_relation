@@ -413,9 +413,6 @@ class Relation(Protocol):
             materialization (in which case the given name or name prefix will
             be ignored).
 
-        Raises
-        ------
-
         See Also
         --------
         Processor.materialize
@@ -646,9 +643,6 @@ class Relation(Protocol):
         relation : `Relation`
             New relation in the given engine.  Will be ``self`` if
             ``self.engine == destination``.
-
-        Raises
-        ------
         """
         raise NotImplementedError()
 
