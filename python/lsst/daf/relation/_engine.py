@@ -367,7 +367,7 @@ class Engine(Hashable):
 
 @dataclasses.dataclass(repr=False, eq=False, kw_only=True)
 class GenericConcreteEngine(Engine, Generic[_F]):
-    """An implementation-focused base class for `Engine` objects
+    """An implementation-focused base class for `Engine` objects.
 
     This class provides common functionality for the provided `iteration` and
     `sql` engines.  It may be used in external engine implementations as well.

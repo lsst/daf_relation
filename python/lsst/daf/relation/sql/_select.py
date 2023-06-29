@@ -134,7 +134,8 @@ class Select(MarkerRelation):
     @property
     def has_sort(self) -> bool:
         """Whether there is a `Sort` between `skip_to` and `target`.
-        (`bool`)"""
+        (`bool`).
+        """
         return bool(self.sort.terms)
 
     @property
@@ -154,7 +155,8 @@ class Select(MarkerRelation):
     @property
     def has_slice(self) -> bool:
         """Whether there is a `Slice` between `skip_to` and `target`
-        (`bool`)."""
+        (`bool`).
+        """
         return bool(self.slice.start) or self.slice.stop is not None
 
     def reapply(self, target: Relation, payload: Any | None = None) -> Select:

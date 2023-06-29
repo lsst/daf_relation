@@ -120,7 +120,7 @@ class MaterializedRowIterable(RowIterable):
 
 
 class RowMapping(MaterializedRowIterable):
-    """A `RowIterable` backed by a `~collections.abc.Mapping`
+    """A `RowIterable` backed by a `~collections.abc.Mapping`.
 
     Parameters
     ----------
@@ -152,7 +152,7 @@ class RowMapping(MaterializedRowIterable):
 
 
 class RowSequence(MaterializedRowIterable):
-    """A `RowIterable` backed by a `~collections.abc.Sequence`
+    """A `RowIterable` backed by a `~collections.abc.Sequence`.
 
     Parameters
     ----------

@@ -70,7 +70,8 @@ class LeafRelationTestCase(unittest.TestCase):
 
     def test_join_identity(self) -> None:
         """Test `LeafRelation.make_join_identity and the iteration engine's
-        get_join_identity_payload."""
+        get_join_identity_payload.
+        """
         engine = iteration.Engine()
         join_identity_leaf = LeafRelation.make_join_identity(engine)
         self.assertEqual(join_identity_leaf, LeafRelation.make_join_identity(engine))
@@ -87,7 +88,8 @@ class LeafRelationTestCase(unittest.TestCase):
 
     def test_doomed(self) -> None:
         """Test `LeafRelation.make_doomed and the iteration engine's
-        get_doomed_payload."""
+        get_doomed_payload.
+        """
         engine = iteration.Engine()
         doomed_leaf = LeafRelation.make_doomed(engine, {self.a, self.b}, ["doomed 1"])
         self.assertEqual(
