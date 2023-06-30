@@ -174,10 +174,10 @@ The standard approach to designs like this in object oriented programming is the
 This implicitly restricts the set of node tree types to those with methods in the algorithm/engine base class.
 
 In languages with functional programming aspects, a much more direct approach involving enumerated types and pattern-matching syntax is often possible.
-With the introduction of the ``match`` statement in Python 3.10, this now includes Python, and this is the approach taken in here.
-This results in much more readable and concise code than the boilerplate-heavy visitor-pattern alternative, but it comes with a significant drawback: there are no checks (either at runtime or via static type checkers like MyPy) that all necessary ``case`` branches of a ``match`` are present.
+With the introduction of the `match` statement in Python 3.10, this now includes Python, and this is the approach taken in here.
+This results in much more readable and concise code than the boilerplate-heavy visitor-pattern alternative, but it comes with a significant drawback: there are no checks (either at runtime or via static type checkers like MyPy) that all necessary `case` branches of a `match` are present.
 This is in part by design - many algorithms on relation trees can act generically on most operation types, and hence need to only explicitly match one or two - but it requires considerable discipline from algorithm and engine authors to ensure that match logic is correct and well-tested.
-Another (smaller) drawback is that it can occasionally yield code that in other contexts might be considered antipatterns (e.g. `isinstance` is often a good alternative to a single-branch ``match``).
+Another (smaller) drawback is that it can occasionally yield code that in other contexts might be considered antipatterns (e.g. `isinstance` is often a good alternative to a single-branch `match`).
 
 .. _relational algebra: https://en.wikipedia.org/wiki/Relational_algebra
 .. _SQLAlchemy: https://www.sqlalchemy.org/
