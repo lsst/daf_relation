@@ -62,7 +62,7 @@ Applying an operation to a relation always returns a new relation (unless the op
 `Deduplication` (`UnaryOperation`) / `Relation.without_duplicates`
    Remove duplicate rows.
    This is equivalent to ``SELECT DISTINCT`` in SQL or filtering through `set` or `dict` in Python.
-`Identity` (`MarkerRelation`)
+`Identity` (`UnaryOperation`)
    Do nothing.
    This operation never actually appears in `Relation` trees; `Identity.apply`
    always returns the operand relation passed to it.

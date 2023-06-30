@@ -247,13 +247,10 @@ class Relation(Protocol):
         Returns
         -------
         relation : `Relation`
-            New relation with all rows from both relations.  If the engine
-            preserves order for chains, all
-            rows from ``self`` will appear before all rows from ``rhs``, in
-            their original order.  This method never returns an operand
-            directly, even if the other has ``max_rows==0``, as it is assumed
-            that even relations with no rows are useful to preserve in the tree
-            for `diagnostics <Diagnostics>`.
+            New relation with all rows from both relations. This method never
+            returns an operand directly, even if the other has ``max_rows==0``,
+            as it is assumed that even relations with no rows are useful to
+            preserve in the tree for `diagnostics <Diagnostics>`.
 
         Raises
         ------
