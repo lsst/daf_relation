@@ -62,7 +62,7 @@ Applying an operation to a relation always returns a new relation (unless the op
 `Deduplication` (`UnaryOperation`) / `Relation.without_duplicates`
    Remove duplicate rows.
    This is equivalent to ``SELECT DISTINCT`` in SQL or filtering through `set` or `dict` in Python.
-`Identity` (`Marker`)
+`Identity` (`UnaryOperation`)
    Do nothing.
    This operation never actually appears in `Relation` trees; `Identity.apply`
    always returns the operand relation passed to it.
@@ -93,7 +93,7 @@ Many relation operations involve column expressions, such as the boolean filter 
 These are represented by the `ColumnExpression` (for general scalar-valued expressions), `Predicate` (for boolean expressions), and `ColumnContainer`  (for expressions that hold multiple values) abstract base classes.
 These base classes provide factory methods for all derived classes, making it generally unnecessary to refer to those types directly (except when writing an algorithm or engine that processes a relation tree; see :ref:`lsst.daf.relation-overview-extensibility`).
 Column expression objects can in general support multiple engines; some types are required to be supported by all engines, while others can hold a list of engine types that support them.
-The concrete column expression classes provided by `lsst.daf.relation` are given below, with their factory methods:
+The concrete column expression classes provided by ``lsst.daf.relation`` are given below, with their factory methods:
 
 `ColumnLiteral` / `ColumnExpression.literal`
    A constant scalar, non-boolean Python value.

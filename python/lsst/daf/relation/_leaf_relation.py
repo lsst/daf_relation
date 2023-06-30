@@ -108,7 +108,7 @@ class LeafRelation(BaseRelation):
             The engine that is responsible for interpreting this relation.
         columns : `~collections.abc.Set` [ `ColumnTag` ]
             The columns in this relation.
-        messages : `~collections.abc.Sequence [ `str` ]
+        messages : `~collections.abc.Sequence` [ `str` ]
             One or more messages explaining why the relation has no rows.
         name : `str`, optional
             Name used to identify and reconstruct this relation.

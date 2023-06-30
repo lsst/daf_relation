@@ -26,7 +26,7 @@ In particular:
 - `.Materialization` operations gather all rows into a `list` unless they are already in a `dict` or `list` (via `RowIterable.materialized`);
 - `.Slice` operations on a `RowSequence` are computed directly, creating another `RowSequence` (all other slices are lazy).
 
-All other operations provided by the `lsst.daf.relation` package are guaranteed to only iterate once over their targets, and yield results row-by-row.
+All other operations provided by the ``lsst.daf.relation`` package are guaranteed to only iterate once over their targets, and yield results row-by-row.
 Custom unary operations can be supported by implementing `Engine.apply_custom_unary_operation`.
 
 API reference

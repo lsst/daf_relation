@@ -86,7 +86,7 @@ class Processor(ABC):
             A version of the relation tree in which any relation with a
             `Transfer` operation has a copy of the original `Transfer` that
             has a `~Relation.payload` attached.
-        """
+        """  # noqa: D401
         return self._process_recursive(relation, materialize_as=None)[0]
 
     @abstractmethod
@@ -115,7 +115,7 @@ class Processor(ABC):
         -------
         payload
             Payload for this relation in the ``destination`` engine.
-        """
+        """  # noqa: D401
         raise NotImplementedError()
 
     @abstractmethod
@@ -140,7 +140,7 @@ class Processor(ABC):
         -------
         payload
             Payload for this relation that should be cached.
-        """
+        """  # noqa: D401
         raise NotImplementedError()
 
     def _process_recursive(self, original: Relation, materialize_as: str | None) -> tuple[Relation, bool]:

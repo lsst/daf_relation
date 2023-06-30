@@ -225,7 +225,7 @@ class Engine(Hashable):
         ----------
         columns : `~collections.abc.Set` [ `ColumnTag` ]
             The columns in this relation.
-        messages : `~collections.abc.Sequence [ `str` ]
+        messages : `~collections.abc.Sequence` [ `str` ]
             One or more messages explaining why the relation has no rows.
         name : `str`, optional
             Name used to identify and reconstruct this relation.
@@ -292,7 +292,7 @@ class Engine(Hashable):
         to actually create a `UnaryOperationRelation` and perform final
         simplification and checks.  This is all the default implementation
         does.
-        """
+        """  # noqa: D401
         return operation._finish_apply(target)
 
     def append_binary(self, operation: BinaryOperation, lhs: Relation, rhs: Relation) -> Relation:
@@ -325,7 +325,7 @@ class Engine(Hashable):
         to actually create a `UnaryOperationRelation` and perform final
         simplification and checks.  This is all the default implementation
         does.
-        """
+        """  # noqa: D401
         return operation._finish_apply(lhs, rhs)
 
     def backtrack_unary(
@@ -367,7 +367,7 @@ class Engine(Hashable):
 
 @dataclasses.dataclass(repr=False, eq=False, kw_only=True)
 class GenericConcreteEngine(Engine, Generic[_F]):
-    """An implementation-focused base class for `Engine` objects
+    """An implementation-focused base class for `Engine` objects.
 
     This class provides common functionality for the provided `iteration` and
     `sql` engines.  It may be used in external engine implementations as well.

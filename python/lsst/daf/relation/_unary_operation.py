@@ -245,8 +245,8 @@ class UnaryOperation(ABC):
     ) -> tuple[UnaryOperation, Engine]:
         """A customization hook for the beginning of operation application.
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         target : `Relation`
             Relation the operation should act on, at least conceptually.  Later
             logic may actually apply the operation upstream of this relation,
@@ -272,7 +272,7 @@ class UnaryOperation(ABC):
         a relation.  Implementations can also return an `Identity` instance
         when they can determine that the operation will do nothing when applied
         to the given target.
-        """
+        """  # noqa: D401
         return self, preferred_engine if preferred_engine is not None else target.engine
 
     def _finish_apply(self, target: Relation) -> Relation:
@@ -297,7 +297,7 @@ class UnaryOperation(ABC):
         implementation does, via calls to `simplify`) and change the kind of
         relation produced (the default implementation constructs a
         `UnaryOperationRelation`).
-        """
+        """  # noqa: D401
         from ._operation_relations import UnaryOperationRelation
 
         match target:

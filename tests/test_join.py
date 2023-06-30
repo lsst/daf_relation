@@ -61,7 +61,8 @@ class JoinTestCase(tests.RelationTestCase):
 
     def test_attributes(self) -> None:
         """Check that all Relation and PartialJoin attributes have the expected
-        values."""
+        values.
+        """
         relation = self.leaf_1.join(self.leaf_2)
         assert isinstance(relation, BinaryOperationRelation)
         self.assertEqual(relation.columns, {self.a, self.b, self.c})

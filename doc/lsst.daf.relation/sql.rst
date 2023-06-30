@@ -15,10 +15,10 @@ Multi-engine relation trees can be executed by a `.Processor` subclass.
 This engine flattens back-to-back `.Join` and `.Chain` operations, and it actually reorders any combination of adjacent `.Join`, `.Selection`, `.Calculation`, and `.Projection` into a single ``SELECT...FROM...WHERE`` statement via the commutation rules for these operations.
 It assumes the database query optimizer will reorder at least these operations itself anyway, so the goal is to keep the query as simple as possible to stay out of its way and aid human readers.
 
-The `Engine.to_executable` method transforms a `.Relation` tree to a SQL ``SELECT`` or ``UNION`` thereof, as represented by `SQLAlchemy_`.
+The `Engine.to_executable` method transforms a `.Relation` tree to a SQL ``SELECT`` or ``UNION`` thereof, as represented by `SQLAlchemy`_.
 The engine's payload type is the `Payload` `~dataclasses.dataclass`, which better maps to SQL tables or very simple subqueries that can be used like tables.
 
-Support for custom `.UnaryOperation` subclasses can be added implementing `Engine.apply_custom_unary_operation`.
+Support for custom `.UnaryOperation` subclasses can be added by reimplementing `Engine.to_payload` while delegating to `super` for the standard operation classes.
 
 .. _lsst.daf.relation-sql-logical-columns:
 

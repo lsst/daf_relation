@@ -53,8 +53,8 @@ class ColumnExpression(ABC):
     the `ColumnFunction` class and an `Engine` that knows how to interpret its
     `~ColumnFunction.name` value.  These concrete types can all be constructed
     via factory methods on `ColumnExpression` itself, so the derived types
-    themselves only need to be referenced when writing `match` expressions that
-    process an expression tree.  See
+    themselves only need to be referenced when writing `match` expressions
+    that process an expression tree.  See
     :ref:`lsst.daf.relation-overview-extensibility` for rationale and details.
     """
 
@@ -70,7 +70,7 @@ class ColumnExpression(ABC):
 
     Interpretation of this attribute is up to the `Engine` or other algorithms
     that operate on the expression tree; it is ignored by all code in the
-    `lsst.daf.relation` package.
+    ``lsst.daf.relation`` package.
     """
 
     @property

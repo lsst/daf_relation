@@ -150,11 +150,11 @@ class Relation(Protocol):
 
     @abstractmethod
     def attach_payload(self, payload: Any) -> None:
-        """Attach an engine-specific `payload` to this relation.
+        """Attach an engine-specific ``payload`` to this relation.
 
         This method may be called exactly once on a `Relation` instance that
-        was not initialized with a `payload`, despite the fact that `Relation`
-        objects are otherwise considered immutable.
+        was not initialized with a ``payload``, despite the fact that
+        `Relation` objects are otherwise considered immutable.
 
         Parameters
         ----------
@@ -247,13 +247,10 @@ class Relation(Protocol):
         Returns
         -------
         relation : `Relation`
-            New relation with all rows from both relations.  If the engine
-            `preserves order <Engine.preserves_chain_order>` for chains, all
-            rows from ``self`` will appear before all rows from ``rhs``, in
-            their original order.  This method never returns an operand
-            directly, even if the other has ``max_rows==0``, as it is assumed
-            that even relations with no rows are useful to preserve in the tree
-            for `diagnostics <Diagnostics>`.
+            New relation with all rows from both relations. This method never
+            returns an operand directly, even if the other has ``max_rows==0``,
+            as it is assumed that even relations with no rows are useful to
+            preserve in the tree for `diagnostics <Diagnostics>`.
 
         Raises
         ------
@@ -261,9 +258,6 @@ class Relation(Protocol):
             Raised if the two relations do not have the same columns.
         EngineError
             Raised if the two relations do not have the same engine.
-        RowOrderError
-            Raised if ``self`` or ``rhs`` is unnecessarily ordered; see
-            `expect_unordered`.
         """
         raise NotImplementedError()
 
@@ -367,9 +361,6 @@ class Relation(Protocol):
             Raised if it was impossible to insert this operation in
             ``rhs.engine`` via backtracks or transfers on ``self``, or if the
             predicate was not supported by the engine.
-        RowOrderError
-            Raised if ``self`` or ``rhs`` is unnecessarily ordered; see
-            `expect_unordered`.
 
         Notes
         -----
@@ -412,9 +403,6 @@ class Relation(Protocol):
             ``self`` if it is already a `LeafRelation` or another
             materialization (in which case the given name or name prefix will
             be ignored).
-
-        Raises
-        ------
 
         See Also
         --------
@@ -646,9 +634,6 @@ class Relation(Protocol):
         relation : `Relation`
             New relation in the given engine.  Will be ``self`` if
             ``self.engine == destination``.
-
-        Raises
-        ------
         """
         raise NotImplementedError()
 
@@ -664,7 +649,7 @@ def _copy_relation_docs(method: _M) -> _M:
     also want those docs to appear in the concrete derived classes, and that
     means we need to put them on the `BaseRelation` class so they can be
     inherited.
-    """
+    """  # noqa: D401
     method.__doc__ = getattr(Relation, method.__name__).__doc__
     return method
 
@@ -676,7 +661,7 @@ class BaseRelation:
     This class provides method implementations for much of the `Relation`
     interface and is actually inherited from (unlike `Relation` itself) by all
     concrete relations.  It should only be used outside of the
-    `lsst.daf.relation` package when needed for `isinstance` checks.
+    ``lsst.daf.relation`` package when needed for `isinstance` checks.
     """
 
     def __init_subclass__(cls) -> None:

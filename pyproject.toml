@@ -33,8 +33,6 @@ dynamic = ["version"]
 [project.optional-dependencies]
 test = [
     "pytest >= 3.2",
-    "flake8 >= 3.7.5",
-    "pytest-flake8 >= 1.0.4",
     "pytest-openfiles >= 0.5.0",
 ]
 
@@ -100,3 +98,66 @@ line_length = 110
 
 [tool.lsst_versions]
 write_to = "python/lsst/daf/relation/version.py"
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"  # Recommended as best practice
+
+[tool.pydocstyle]
+convention = "numpy"
+# Our coding style does not require docstrings for magic methods (D105)
+# Our docstyle documents __init__ at the class level (D107)
+# We allow methods to inherit docstrings and this is not compatible with D102.
+# Docstring at the very first line is not required
+# D200, D205 and D400 all complain if the first sentence of the docstring does
+# not fit on one line.
+add-ignore = ["D107", "D105", "D102", "D100", "D200", "D205", "D400", "D104", "D401"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+
+[tool.ruff]
+exclude = [
+    "__init__.py",
+]
+ignore = [
+    "N802",
+    "N803",
+    "N806",
+    "N812",
+    "N815",
+    "N816",
+    "N999",
+    "D107",
+    "D105",
+    "D102",
+    "D104",
+    "D100",
+    "D200",
+    "D205",
+]
+line-length = 110
+select = [
+    "E",  # pycodestyle
+    "F",  # pyflakes
+    "N",  # pep8-naming
+    "W",  # pycodestyle
+    "D",  # pydocstyle
+    "UP",
+]
+target-version = "py310"
+extend-select = [
+    "RUF100", # Warn about unused noqa
+]
+
+[tool.ruff.pycodestyle]
+max-doc-length = 79
+
+[tool.ruff.pydocstyle]
+convention = "numpy"

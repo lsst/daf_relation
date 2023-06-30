@@ -91,7 +91,8 @@ class DiagnosticsTestCase(tests.RelationTestCase):
 
     def test_executed_leaf(self) -> None:
         """Test Diagnostics on LeafRelations with max_rows != 0 and
-        empty-invariant operations acting on them."""
+        empty-invariant operations acting on them.
+        """
         engine = EmptyLookupEngine()
         leaf = engine.make_leaf("leaf")
         self.assertEqual(

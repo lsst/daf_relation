@@ -39,7 +39,8 @@ if TYPE_CHECKING:
 @dataclasses.dataclass(frozen=True)
 class Chain(BinaryOperation):
     """A relation operation that concatenates the rows of a pair of relations
-    with the same columns."""
+    with the same columns.
+    """
 
     def __str__(self) -> str:
         return "∪"
