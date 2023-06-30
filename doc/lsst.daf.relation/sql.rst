@@ -18,7 +18,7 @@ It assumes the database query optimizer will reorder at least these operations i
 The `Engine.to_executable` method transforms a `.Relation` tree to a SQL ``SELECT`` or ``UNION`` thereof, as represented by `SQLAlchemy`_.
 The engine's payload type is the `Payload` `~dataclasses.dataclass`, which better maps to SQL tables or very simple subqueries that can be used like tables.
 
-Support for custom `.UnaryOperation` subclasses can be added implementing `~lsst.daf.relation.iteration.Engine.apply_custom_unary_operation`.
+Support for custom `.UnaryOperation` subclasses can be added by reimplementing `Engine.to_payload` while delegating to `super` for the standard operation classes.
 
 .. _lsst.daf.relation-sql-logical-columns:
 
