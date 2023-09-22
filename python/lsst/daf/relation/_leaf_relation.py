@@ -56,7 +56,7 @@ class LeafRelation(BaseRelation):
     name: str = dataclasses.field(repr=True, compare=True, default="")
     """Name used to identify and reconstruct this relation (`str`)."""
 
-    name_prefix: dataclasses.InitVar[str | None] = "leaf"
+    name_prefix: dataclasses.InitVar[str] = "leaf"
     """Prefix used when calling `Engine.get_relation_name` when `name` is not
     provided (`str`).
     """
