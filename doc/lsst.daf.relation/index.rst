@@ -194,6 +194,16 @@ Provided Engines
    iteration.rst
    sql.rst
 
+.. _lsst.daf_relation-changes:
+
+Changes
+=======
+
+.. toctree::
+   :maxdepth: 1
+
+   CHANGES.rst
+
 Contributing
 ============
 
