@@ -50,7 +50,7 @@ license-files = ["COPYRIGHT", "LICENSE"]
 version = { attr = "lsst_versions.get_lsst_version" }
 
 [tool.towncrier]
-    package = "lsst.daf_relation"
+    package = "lsst.daf.relation"
     package_dir = "python"
     filename = "doc/lsst.daf.relation/CHANGES.rst"
     directory = "doc/changes"
@@ -81,12 +81,12 @@ version = { attr = "lsst_versions.get_lsst_version" }
     [[tool.towncrier.type]]
         directory = "misc"
         name = "Miscellaneous Changes of Minor Interest"
-        showcontent = false
+        showcontent = true
 
     [[tool.towncrier.type]]
         directory = "removal"
         name = "An API Removal or Deprecation"
-        showcontent = false
+        showcontent = true
 
 [tool.black]
 line-length = 110
