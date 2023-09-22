@@ -1,2 +1,2 @@
-git+https://github.com/lsst/utils@main#egg=lsst-utils
+git+https://github.com/lsst/utils@v26.0.x#egg=lsst-utils
 sqlalchemy >= 1.4

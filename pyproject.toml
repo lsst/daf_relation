@@ -21,7 +21,7 @@ classifiers = [
 keywords = ["lsst"]
 dependencies = [
     "sqlalchemy >= 1.4",
-    "lsst-utils",
+    "lsst-utils >=26.0,<26.100",
     "deprecated >= 1.2",
     "pydantic",
 ]
