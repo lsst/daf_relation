@@ -53,7 +53,13 @@ class Deduplication(UnaryOperation):
 
     def applied_min_rows(self, target: Relation) -> int:
         # Docstring inherited.
-        return 1
+        return 1 if target.min_rows >= 1 else 0
+
+    def applied_max_rows(self, target: Relation) -> int | None:
+        # Docstring inherited.
+        if not target.columns:
+            return 1 if target.max_rows is None or target.max_rows >= 1 else 0
+        return target.max_rows
 
     def commute(self, current: UnaryOperationRelation) -> UnaryCommutator:
         # Docstring inherited.
