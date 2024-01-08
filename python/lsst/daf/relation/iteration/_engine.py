@@ -284,8 +284,7 @@ class Engine(GenericConcreteEngine[Callable[..., Any]]):
                 function = self.get_function(name)
                 if function is not None:
                     arg_callables = [self.convert_column_expression(arg) for arg in args]
-                    # MyPy doesn't see 'function' as not-None for some reason.
-                    return lambda row: function(*[c(row) for c in arg_callables])  # type: ignore
+                    return lambda row: function(*[c(row) for c in arg_callables])
                 first, *rest = (self.convert_column_expression(arg) for arg in args)
                 return lambda row: getattr(first(row), name)(*[r(row) for r in rest])
         raise AssertionError("matches should be exhaustive and all branches should return")
@@ -336,9 +335,7 @@ class Engine(GenericConcreteEngine[Callable[..., Any]]):
                 function = self.get_function(name)
                 if function is not None:
                     arg_callables = [self.convert_column_expression(arg) for arg in args]
-                    # MyPy doesn't see 'function' as not-None in the capture
-                    # for some reason.
-                    return lambda row: function(*[c(row) for c in arg_callables])  # type: ignore
+                    return lambda row: function(*[c(row) for c in arg_callables])
                 first, *rest = (self.convert_column_expression(arg) for arg in args)
                 return lambda row: getattr(first(row), name)(*[r(row) for r in rest])
             case LogicalAnd(operands=operands):

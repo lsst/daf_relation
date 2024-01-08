@@ -665,15 +665,13 @@ class BaseRelation:
     """
 
     def __init_subclass__(cls) -> None:
-        assert (
-            cls.__name__
-            in {
-                "LeafRelation",
-                "UnaryOperationRelation",
-                "BinaryOperationRelation",
-                "MarkerRelation",
-            }
-            or cls.__base__.__name__ != "Relation"
+        assert cls.__name__ in {
+            "LeafRelation",
+            "UnaryOperationRelation",
+            "BinaryOperationRelation",
+            "MarkerRelation",
+        } or (
+            cls.__base__ is not None and cls.__base__.__name__ != "Relation"
         ), "Relation inheritance is closed to predefined types in daf_relation and MarkerRelation subclasses."
 
     @property

@@ -63,6 +63,16 @@ class DeduplicationTestCase(tests.RelationTestCase):
         self.assertFalse(operation.is_order_dependent)
         self.assertFalse(operation.is_count_dependent)
 
+    def test_min_max_rows(self) -> None:
+        """Test min and max rows for edge-case deduplications."""
+        self.assertEqual(self.leaf.with_only_columns(set()).without_duplicates().min_rows, 1)
+        self.assertEqual(self.leaf.with_only_columns(set()).without_duplicates().max_rows, 1)
+        leaf0 = self.engine.make_leaf({self.a}, payload=iteration.RowSequence([]), name="leaf")
+        self.assertEqual(leaf0.without_duplicates().min_rows, 0)
+        self.assertEqual(leaf0.without_duplicates().max_rows, 0)
+        self.assertEqual(leaf0.with_only_columns([]).without_duplicates().min_rows, 0)
+        self.assertEqual(leaf0.with_only_columns([]).without_duplicates().max_rows, 0)
+
     def test_backtracking_apply(self) -> None:
         """Test apply logic that involves reordering operations in the existing
         tree to perform the new operation in a preferred engine.
