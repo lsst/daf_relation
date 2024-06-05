@@ -1,3 +1,10 @@
+lsst-daf-relation v27.0.0 2024-06-05
+====================================
+
+Validated with Python 3.12.
+
+- Fixed min/max rows logic for deduplication (`DM-42324 <https://rubinobs.atlassian.net/browse/DM-42324>`_)
+
 lsst-daf-relation v26.0.0 2023-09-22
 ====================================
 
