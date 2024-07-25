@@ -196,14 +196,14 @@ class BinaryOperationRelation(BaseRelation):
             case LeafRelation():
                 lhs_str = str(self.lhs)
             case BinaryOperationRelation(operation=lhs_operation):
-                if type(lhs_operation) is type(self.operation):
+                if type(lhs_operation) is type(self.operation):  # noqa: E721
                     lhs_str = str(self.lhs)
         rhs_str = f"({self.rhs!s})"
         match self.rhs:
             case LeafRelation():
                 rhs_str = str(self.rhs)
             case BinaryOperationRelation(operation=rhs_operation):
-                if type(rhs_operation) is type(self.operation):
+                if type(rhs_operation) is type(self.operation):  # noqa: E721
                     rhs_str = str(self.rhs)
         return f"{lhs_str} {self.operation!s} {rhs_str}"
 
