@@ -1,2 +1,2 @@
-lsst-utils @ git+https://github.com/lsst/utils@main
+lsst-utils @ git+https://github.com/lsst/utils@v28.0.x
 sqlalchemy >= 1.4
