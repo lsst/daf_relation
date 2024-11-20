@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -56,11 +56,16 @@ jobs:
         env:
           SQLALCHEMY_WARN_20: 1
         run: |
-          pytest -r a -v -n 3 --cov=lsst.daf.butler --cov=tests --cov-report=xml --cov-report=term --cov-branch
+          pytest -r a -v -n 3 --cov=lsst.daf.butler --cov=tests --cov-report=xml --cov-report=term --cov-branch --junitxml=junit.xml -o junit_family=legacy
       - name: Upload coverage to codecov
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   pypi:
@@ -81,7 +86,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade "pip<22"
+          python -m pip install --upgrade pip
           pip install --upgrade setuptools wheel build
 
       - name: Build and create distribution
